@@ -31,11 +31,12 @@ int main (int argc, char * argv[]) {
 	char desty[20];
 	struct position dest;
 	struct timespec tv1, tv2;
+	long traveltime;
 
 	sscanf(argv[5], "%lf", &speed);
 
 	while(flag) {
-		sleep(5);
+		sleep(3);
 		message.mesg_type = 1;
 		strcpy(string_out, argv[2]);
 		strcat(string_out, ":");
@@ -43,7 +44,7 @@ int main (int argc, char * argv[]) {
 		strcat(string_out, ":");
 		strcat(string_out, posy_str);
 		strcat(string_out, ":");
-		strcat(string_out, "0");
+		strcat(string_out, "1");
 		strcpy(message.mesg_text, string_out);
 		msgsnd(atoi(argv[6]), &message, (sizeof(long) + sizeof(char) * 100), 0);
 
@@ -53,21 +54,30 @@ int main (int argc, char * argv[]) {
 			printf("NO MORE PORTS FOUND, TERMINATING NAVE %d\n", argv[2]);
 			break;
 		}
+
+
 		strcpy(msgq_id_porto, strtok(message.mesg_text, ":"));
 		strcpy(destx, strtok(NULL, ":"));
 		strcpy(desty, strtok(NULL, ":"));
 		printf("NAVE %s SETTING COURSE TO %s %s\n", argv[2], destx, desty);
 		sscanf(destx, "%lf", &dest.x);
 		sscanf(desty, "%lf", &dest.y);
-		tv1.tv_sec = 0;
-		tv1.tv_nsec = 10;//speed * 1000 * sqrt(pow((dest.x - pos.x),2) + pow((dest.y - pos.y),2));
-		printf("NAVE %s TRAVELING TO DESTINATION (ETA: %f)\n", tv1.tv_nsec);
+		//printf("TIME: %f\n", (sqrt(pow((dest.x - pos.x),2) + pow((dest.y - pos.y),2)) / speed));
+		//printf("TRAVELTIME: %ld\n", (long) ((sqrt(pow((dest.x - pos.x),2) + pow((dest.y - pos.y),2)) / speed * 1000000000)));
+		traveltime = (long) ((sqrt(pow((dest.x - pos.x),2) + pow((dest.y - pos.y),2)) / speed * 1000000000));
+		tv1.tv_nsec = traveltime % 1000000000;
+		tv1.tv_sec = (int) ((traveltime - tv1.tv_nsec) / 1000000000);
+		printf("SEC: %d NANOSEC %ld\n", tv1.tv_sec, tv1.tv_nsec);
 		nanosleep(&tv1, &tv2);
 		pos.x = dest.x;
 		pos.y = dest.y;
 		strcpy(posx_str, destx);
 		strcpy(posy_str, desty);
 		printf("NAVE %s ARRIVED AT %f %f\n", argv[2], pos.x, pos.y);
+		
+		strcpy(message.mesg_text, "CIAO DA NAVE");
+		msgsnd(atoi(msgq_id_porto), &message, (sizeof(long) + sizeof(char) * 100), 0);
+
 		break;
 	}
 

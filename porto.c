@@ -44,7 +44,7 @@ int main (int argc, char * argv[]) {
 	sem_id = atoi(argv[2]);
 	port_id = argv[4];
 	banks = atoi(argv[7]);
-	printf("POSIZIONE PORTO %d = %s %s\n", atoi(argv[4]), argv[5], argv[6]);
+	//printf("POSIZIONE PORTO %d = %s %s\n", atoi(argv[4]), argv[5], argv[6]);
 
 	for(int i = 0; i < 3; i++) {
 		sops.sem_op = -1;
@@ -58,9 +58,10 @@ int main (int argc, char * argv[]) {
 		sops.sem_op = 1;
 		semop(sem_id, &sops, 1);
 	}
-
-	msgrcv(atoi(argv[3]), &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
-	printf("RECEIVED : %s\n", message.mesg_text);
+	while(1) {
+		msgrcv(atoi(argv[3]), &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
+		printf("RECEIVED : %s\n", message.mesg_text);
+	}
 
 	exit(0);
 }

@@ -1,4 +1,5 @@
 struct merce {
+    int type;
     int qty;
     int lifeTime;
 };
