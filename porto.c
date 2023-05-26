@@ -16,19 +16,27 @@ int main (int argc, char * argv[]) {
 	struct mesg_buffer message; 
 	int port_id;
 	int banks;
-	int shm_id, sem_id;
-	struct merce *shm_ptr;
+	int shm_id_aval, shm_id_req, sem_id;
+	struct merce *shm_ptr_aval, *shm_ptr_req;
 	key_t mem_key;
 	struct sembuf sops;
 	struct merce *available;
 	struct merce *requested;
 	struct position pos;
 
-	if((int) (shm_id = atoi(argv[1])) < 0) {
+	if((int) (shm_id_aval = atoi(argv[1])) < 0) {
 		printf("*** shmget error porto***\n");
 		exit(1);
 	}
-	if((struct merce *) (shm_ptr = (struct merce *) shmat(shm_id, NULL, 0)) == -1) {
+	if((struct merce *) (shm_ptr_aval = (struct merce *) shmat(shm_id_aval, NULL, 0)) == -1) {
+		printf("*** shmat error porto***\n");
+		exit(1);
+	}
+	if((int) (shm_id_req = atoi(argv[8])) < 0) {
+		printf("*** shmget error porto***\n");
+		exit(1);
+	}
+	if((struct merce *) (shm_ptr_req = (struct merce *) shmat(shm_id_req, NULL, 0)) == -1) {
 		printf("*** shmat error porto***\n");
 		exit(1);
 	}
@@ -42,10 +50,10 @@ int main (int argc, char * argv[]) {
 		sops.sem_op = -1;
 		semop(sem_id, &sops, 1);
 
-        printf("PRINT FROM PORTO %d: %d\n", atoi(argv[4]), shm_ptr[i].qty, port_id);
-		shm_ptr[i].qty++;
+        //printf("PORTO %d HAS: %d OF %d\n", atoi(argv[4]), shm_ptr_aval[i].qty, i);
+        //printf("PORTO %d REQUESTS: %d OF %d\n", atoi(argv[4]), shm_ptr_req[i].qty, i);
 
-		sleep(1);
+		sleep(0);
 
 		sops.sem_op = 1;
 		semop(sem_id, &sops, 1);
