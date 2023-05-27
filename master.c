@@ -8,42 +8,44 @@
 #include <string.h>
 #include <math.h>
 #include <sys/time.h>
+#include <signal.h>
 #include "merce.h"
 
 #define NAVE "nave.o"
 #define PORTO "porto.o"
 
-int main () {
+int main (int argc, char ** argv) {
 	struct mesg_buffer {
     	long mesg_type;
     	char mesg_text[100];
 	};
 
-	//DA RENDERE LETTO DA FILE
-	int numporti = 8;
-	int nummerci = 5;
-	int maxrandommerce = 100;
-	int numnavi = 2;
-	int banchine = 2;
-	double max_x = 10;
-	double max_y = 10;
-	int shipsize = 10;
-	int min_spoil = 5;
-	int max_spoil = 20;
-	double shipspeed = 1;
-	char so_fill[1] = "5";
-	struct mesg_buffer message;
+	//read parameters from file
+	FILE *inputfile;
+	struct parameters parameters;
 
+	if(argc == 2) {
+		if((inputfile = fopen(argv[1], "r")) == NULL) {
+			printf("Error in opening file\n");
+			return(1);
+		}
+		read_parameters_from_file(inputfile, &parameters);
+	} else {
+		printf("Usage: master <filepath>\n");
+		return(1);
+	}
+
+	struct mesg_buffer message;
 	int sem_id, status;
 	pid_t child_pid, *kid_pids;
 	struct sembuf sops;
     char *args[11];
 	char *argss[8];
-	int *ports_shm_id_aval = malloc(numporti * sizeof(ports_shm_id_aval));
-	struct merce **ports_shm_ptr_aval = malloc(numporti * sizeof(ports_shm_ptr_aval));
-	int *ports_shm_id_req = malloc(numporti * sizeof(ports_shm_id_req));
-	struct merce **ports_shm_ptr_req = malloc(numporti * sizeof(ports_shm_ptr_req));
-	struct position *ports_positions = malloc(numporti * sizeof(struct position));
+	int *ports_shm_id_aval = malloc(parameters.SO_PORTI * sizeof(ports_shm_id_aval));
+	struct merce **ports_shm_ptr_aval = malloc(parameters.SO_PORTI * sizeof(ports_shm_ptr_aval));
+	int *ports_shm_id_req = malloc(parameters.SO_PORTI * sizeof(ports_shm_id_req));
+	struct merce **ports_shm_ptr_req = malloc(parameters.SO_PORTI * sizeof(ports_shm_ptr_req));
+	struct position *ports_positions = malloc(parameters.SO_PORTI * sizeof(struct position));
     char shm_id_str[3*sizeof(int)+1];
     char shm_id_req_str[3*sizeof(int)+1];
     char sem_id_str[3*sizeof(int)+1];
@@ -51,13 +53,15 @@ int main () {
 	char id[2];
 	char x[20];
 	char y[20];
-	char banks[20];
-	char speed[20];
+	char banks[10];
+	char fill[10];
+	char speed[10];
+
 	int master_msgq;
 	char master_msgq_str[3*sizeof(int)+1];
 
-	int *msgqueue_porto = malloc(numporti * sizeof(int));
-	int *msgqueue_nave = malloc(numnavi * sizeof(int));
+	int *msgqueue_porto = malloc(parameters.SO_PORTI * sizeof(int));
+	int *msgqueue_nave = malloc(parameters.SO_NAVI * sizeof(int));
 
 	srand(time(NULL));
 
@@ -67,7 +71,7 @@ int main () {
 	sops.sem_num = 0;
 	sops.sem_flg = 0;
 
-	kid_pids = malloc((numporti + numnavi) * sizeof(*kid_pids));
+	kid_pids = malloc((parameters.SO_PORTI + parameters.SO_NAVI) * sizeof(*kid_pids));
 
 	if((master_msgq = msgget(IPC_PRIVATE, IPC_CREAT | 0600)) == -1) {
 		printf("*** master msgqueue error ***\n");
@@ -77,19 +81,19 @@ int main () {
 	ports_positions[0].x = 0;
 	ports_positions[0].y = 0;
 
-	ports_positions[1].x = max_x;
+	ports_positions[1].x = parameters.SO_LATO;
 	ports_positions[1].y = 0;
 
 	ports_positions[2].x = 0;
-	ports_positions[2].y = max_y;
+	ports_positions[2].y = parameters.SO_LATO;
 
-	ports_positions[3].x = max_x;
-	ports_positions[3].y = max_y;
+	ports_positions[3].x = parameters.SO_LATO;
+	ports_positions[3].y = parameters.SO_LATO;
 
 	int a,b;
 	//create ports
-	for(int i = 0; i < numporti; i++) {
-		if((int) (ports_shm_id_aval[i]  = shmget(IPC_PRIVATE, nummerci * sizeof(struct merce *), 0600)) < 0) {
+	for(int i = 0; i < parameters.SO_PORTI; i++) {
+		if((int) (ports_shm_id_aval[i]  = shmget(IPC_PRIVATE, parameters.SO_MERCI * sizeof(struct merce *), 0600)) < 0) {
 			printf("*** shmget aval error ***\n");
 			exit(1);
 		}
@@ -100,7 +104,7 @@ int main () {
 			exit(1);
 		}
 
-		if((int) (ports_shm_id_req[i]  = shmget(IPC_PRIVATE, nummerci * sizeof(struct merce *), 0600)) < 0) {
+		if((int) (ports_shm_id_req[i]  = shmget(IPC_PRIVATE, parameters.SO_MERCI * sizeof(struct merce *), 0600)) < 0) {
 			printf("*** shmget req error ***\n");
 			exit(1);
 		}
@@ -115,11 +119,10 @@ int main () {
 			printf("*** msgqueue_porto error ***\n");
 			exit(1);
 		}
-		//printf("msgqueue_porto[%d] = %d\n", i, msgqueue_porto[i]);
 		
 		if(i > 3) {
-			ports_positions[i].x = (rand() / (double)RAND_MAX) * max_x;
-			ports_positions[i].y = (rand() / (double)RAND_MAX) * max_y;
+			ports_positions[i].x = (rand() / (double)RAND_MAX) * parameters.SO_LATO;
+			ports_positions[i].y = (rand() / (double)RAND_MAX) * parameters.SO_LATO;
 		}
 		
 		printf("PORT CREATED IN %f %f\n", ports_positions[i].x, ports_positions[i].y);
@@ -133,17 +136,17 @@ int main () {
 
 		a = 0;
 		b = 0;
-		for(int j = 0; j < nummerci; j++) {
+		for(int j = 1; j < parameters.SO_MERCI + 1; j++) {
 			if(rand()%2 == 1) {
-				ports_shm_ptr_aval[i][a].type = j + 1;
-				ports_shm_ptr_aval[i][a].qty = 10 + rand() % maxrandommerce;
+				ports_shm_ptr_aval[i][a].type = j;
+				ports_shm_ptr_aval[i][a].qty = 1 + rand() % parameters.SO_SIZE;
 				gettimeofday(&ports_shm_ptr_aval[i][a].spoildate, NULL);
-				ports_shm_ptr_aval[i][a].spoildate.tv_sec += rand() % (max_spoil - min_spoil);
+				ports_shm_ptr_aval[i][a].spoildate.tv_sec += rand() % (parameters.SO_MAX_VITA - parameters.SO_MIN_VITA);
 				printf("---ADDED: %d TONS OF %d TO PORT %d\n" , ports_shm_ptr_aval[i][a].qty, ports_shm_ptr_aval[i][a].type, i);
 				a = a + 1;
 			} else {
-				ports_shm_ptr_req[i][b].type = j + 1;
-				ports_shm_ptr_req[i][b].qty = 10 + rand() % maxrandommerce;
+				ports_shm_ptr_req[i][b].type = j;
+				ports_shm_ptr_req[i][b].qty = 1 + rand() % parameters.SO_SIZE;
 				printf("---ADDED REQUEST: %d TONS OF %d TO PORT %d\n" , ports_shm_ptr_req[i][b].qty, ports_shm_ptr_req[i][b].type, i);
 				b = b + 1;
 			}
@@ -151,14 +154,15 @@ int main () {
 	}
 
 	//create ships
-	for(int j = 0; j < numnavi; j++) {
+	for(int j = 0; j < parameters.SO_NAVI; j++) {
 		if((msgqueue_nave[j] = msgget(IPC_PRIVATE, IPC_CREAT | 0600)) == -1) {
 			printf("*** msgqueue error ***\n");
 			exit(1);
 		}
 	}
 
-	for(int i = 0; i < numporti; i++) {
+	//start port processes
+	for(int i = 0; i < parameters.SO_PORTI; i++) {
 		sprintf(shm_id_str, "%d", ports_shm_id_aval[i]);
 		sprintf(shm_id_req_str, "%d", ports_shm_id_req[i]);
 		sprintf(sem_id_str, "%d", sem_id);
@@ -166,7 +170,8 @@ int main () {
 		sprintf(id, "%d", i);
 		sprintf(x, "%f", ports_positions[i].x);
 		sprintf(y, "%f", ports_positions[i].y);
-		sprintf(banks, "%d", banchine);
+		sprintf(banks, "%d", parameters.SO_BANCHINE);
+		sprintf(fill, "%d", parameters.SO_FILL);
 		args[0] = PORTO;
 		args[1] = shm_id_str;
 		args[2] = sem_id_str;
@@ -176,7 +181,7 @@ int main () {
 		args[6] = y;
 		args[7] = banks;
 		args[8] = shm_id_req_str;
-    	args[9] = so_fill;
+    	args[9] = fill;
     	args[10] = NULL;
 
 		switch(kid_pids[i] = fork()) {
@@ -190,13 +195,14 @@ int main () {
 		}
 	}
 
-	for(int j = 0; j < numnavi; j++) {
+	//start ship processes
+	for(int j = 0; j < parameters.SO_NAVI; j++) {
 		sprintf(msgq_id_str, "%d", msgqueue_nave[j]);
 		sprintf(master_msgq_str, "%d", master_msgq);
 		sprintf(id, "%d", j);
-		sprintf(x, "%f", (rand() / (double)RAND_MAX) * max_x);
-		sprintf(y, "%f", (rand() / (double)RAND_MAX) * max_y);
-		sprintf(speed, "%f", shipspeed);
+		sprintf(x, "%f", (rand() / (double)RAND_MAX) * parameters.SO_LATO);
+		sprintf(y, "%f", (rand() / (double)RAND_MAX) * parameters.SO_LATO);
+		sprintf(speed, "%f", parameters.SO_SPEED);
 		argss[0] = NAVE;
 		argss[1] = msgq_id_str;
 		argss[2] = id;
@@ -208,7 +214,7 @@ int main () {
 
 		//printf("TEST: %s %s\n", x, y);
 		
-		switch(kid_pids[numporti+j] = fork()) {
+		switch(kid_pids[parameters.SO_PORTI+j] = fork()) {
 			case -1:
 				break;
 			case 0:
@@ -220,7 +226,7 @@ int main () {
 	}
 
 	sops.sem_op = 1;
-	semop(sem_id, &sops, 1);
+	//semop(sem_id, &sops, SIGUSR1);
 
 	char idin[10];
 	char posx_str[20];
@@ -228,7 +234,8 @@ int main () {
 	char merce[20];
 	char string_out[100];
 	int idfind;
-	
+
+	//handle messages
 	while(1) {
 		msgrcv(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
 		printf("MASTER RECEIVED : %s\n", message.mesg_text);
@@ -237,7 +244,7 @@ int main () {
 		strcpy(posy_str, strtok(NULL, ":"));
 		strcpy(merce, strtok(NULL, ":"));
 		printf("PARSED ID: %s, POSX: %s, POSY: %s, MERCE: %s\n", idin, posx_str, posy_str, merce);
-		idfind = getRequesting(posx_str, posy_str, ports_positions, ports_shm_ptr_req, atoi(merce), numporti);
+		idfind = getRequesting(posx_str, posy_str, ports_positions, ports_shm_ptr_req, atoi(merce), parameters.SO_PORTI);
 
 		message.mesg_type = 1;
 		if(idfind < 0) {
@@ -259,26 +266,24 @@ int main () {
 		dprintf(2, "Pid=%d. Sender (PID=%d) terminated with status 0x%04X\n", getpid(), child_pid, status);
 	}
 
-	for(int i = 0; i < numporti; i++) {
+	//close messagequeues
+	for(int i = 0; i < parameters.SO_PORTI; i++) {
 		msgctl(msgqueue_porto[i], IPC_RMID, NULL);
 	}
-	for(int i = 0; i < numnavi; i++) {
+	for(int i = 0; i < parameters.SO_NAVI; i++) {
 		msgctl(msgqueue_nave[i], IPC_RMID, NULL);
 	}
+
 	msgctl(master_msgq, IPC_RMID, NULL);
 
-	/*for(int i = 0; i < numporti; i++) {
-		for(int j = 0; j < nummerci; j++) {
-			printf("END: %d\n" , ports_shm_ptr_aval[i][j].qty);
-		}
-	}*/
-
+	//close semaphore and shared memories
 	semctl(sem_id, 0, IPC_RMID);
 	shmctl(ports_shm_id_aval, IPC_RMID, NULL);
 
 	exit(0);
 }
 
+//gets the closed port that has a request for the specified merce; if the merce is not specified or no port has a request for it returns a random port
 int getRequesting(char *posx_s, char *posy_s, struct position * portpositions, struct merce ** portsrequests, int merce, int nporti) {
 	struct position currpos;
 	struct position minpos;
@@ -310,4 +315,59 @@ int getRequesting(char *posx_s, char *posy_s, struct position * portpositions, s
 	}
 	printf("NO REQUESTS OF MERCE %d, RETURNING RANDOM PORT\n", merce);
 	return rand() % nporti;
+}
+
+//load parameters from an input file; parameters must be separated by comma
+void read_parameters_from_file(FILE *inputfile, struct parameters * parameters) {
+	char string[256];
+	char data[10];
+	fgets(&string, 256, inputfile);
+
+	strcpy(data, strtok(string, ","));
+	parameters->SO_NAVI = atoi(data);
+
+	strcpy(data, strtok(NULL, ","));
+	parameters->SO_PORTI = atoi(data);
+
+	strcpy(data, strtok(NULL, ","));
+	parameters->SO_MERCI = atoi(data);
+
+	strcpy(data, strtok(NULL, ","));
+	parameters->SO_SIZE = atoi(data);
+
+	strcpy(data, strtok(NULL, ","));
+	parameters->SO_MIN_VITA = atoi(data);
+
+	strcpy(data, strtok(NULL, ","));
+	parameters->SO_MAX_VITA = atoi(data);
+
+	strcpy(data, strtok(NULL, ","));
+	parameters->SO_LATO = atoi(data);
+
+	strcpy(data, strtok(NULL, ","));
+	parameters->SO_SPEED = atoi(data);
+
+	strcpy(data, strtok(NULL, ","));
+	parameters->SO_CAPACITY = atoi(data);
+
+	strcpy(data, strtok(NULL, ","));
+	parameters->SO_BANCHINE = atoi(data);
+
+	strcpy(data, strtok(NULL, ","));
+	parameters->SO_FILL = atoi(data);
+
+	strcpy(data, strtok(NULL, ","));
+	parameters->SO_LOADSPEED = atoi(data);
+
+	strcpy(data, strtok(NULL, ","));
+	parameters->SO_DAYS = atoi(data);
+
+	strcpy(data, strtok(NULL, ","));
+	parameters->SO_STORM_DURATION = atoi(data);
+
+	strcpy(data, strtok(NULL, ","));
+	parameters->SO_SWELL_DURATION = atoi(data);
+
+	strcpy(data , strtok(NULL, ","));
+	parameters->SO_MAELSTORM = atoi(data);
 }

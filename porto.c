@@ -7,18 +7,26 @@
 #include <sys/sem.h>
 #include <string.h>
 #include <sys/time.h>
+#include <signal.h>
 #include "merce.h"
+
+void test() {
+	printf("SIGNAL RECEIVED!!!!!!!\n");
+}
 
 int main (int argc, char * argv[]) {
 	struct mesg_buffer {
     	long mesg_type;
     	char mesg_text[100];
 	};
+	
+	srand(time(NULL));
 
 	struct mesg_buffer message; 
-	int port_id;
-	int docks;
-	int shm_id_aval, shm_id_req, sem_id;
+	int port_id = atoi(argv[4]);
+	int docks = rand() % atoi(argv[7]);
+	int shm_id_aval, shm_id_req, sem_id = atoi(argv[2]);
+	int msgq_porto = atoi(argv[3]);
 	struct merce *shm_ptr_aval, *shm_ptr_req;
 	key_t mem_key;
 	struct sembuf sops;
@@ -26,6 +34,7 @@ int main (int argc, char * argv[]) {
 	struct merce *requested;
 	struct position pos;
 
+	//setup shared memory access
 	if((int) (shm_id_aval = atoi(argv[1])) < 0) {
 		printf("*** shmget error porto ***\n");
 		exit(1);
@@ -43,11 +52,9 @@ int main (int argc, char * argv[]) {
 		exit(1);
 	}
 
-	sem_id = atoi(argv[2]);
-	port_id = argv[4];
 	//printf("POSIZIONE PORTO %d = %s %s\n", atoi(argv[4]), argv[5], argv[6]);
 
-	for(int i = 0; i < 3; i++) {
+	/*for(int i = 0; i < 3; i++) {
 		sops.sem_op = -1;
 		semop(sem_id, &sops, 1);
 
@@ -58,19 +65,19 @@ int main (int argc, char * argv[]) {
 
 		sops.sem_op = 1;
 		semop(sem_id, &sops, 1);
-	}
+	}*/
 
-	docks = atoi(argv[7]);
+	//start handling ships
 	int occupied_docks = 0;
 	char ship_id[20];
 	char operation[20];
 	char text[20];
-	int queue[docks];
+	int queue[docks * 2];
 	int front = -1;
 	int rear = -1;
 
 	while(1) {
-		msgrcv(atoi(argv[3]), &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
+		msgrcv(msgq_porto, &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
 		strcpy(operation, strtok(message.mesg_text, ":"));
 		strcpy(ship_id, strtok(NULL, ":"));
 
@@ -90,7 +97,7 @@ int main (int argc, char * argv[]) {
 			
 		} else if(strcmp(operation, "dockfree") == 0) {
 			printf("PORT %s HAS FINISHED SERVING SHIP %s\n", argv[4], ship_id);
-			removeSpoiled(shm_ptr_aval, atoi(argv[4]));
+			removeSpoiled(shm_ptr_aval, port_id);
 			occupied_docks -= 1;
 		}
 
@@ -104,7 +111,7 @@ int main (int argc, char * argv[]) {
 			strcat(message.mesg_text, ":");
 			sprintf(text, "%d", shm_id_aval);
 			strcat(message.mesg_text, text);
-			removeSpoiled(shm_ptr_aval, atoi(argv[4]));
+			removeSpoiled(shm_ptr_aval, port_id);
 			msgsnd(queue[front], &message, (sizeof(long) + sizeof(char) * 100), 0);
 			front++;
 			if(front > rear) {
@@ -158,3 +165,4 @@ void removeSpoiled(struct merce *available, int portid) {
 		}
 	}
 }
+
