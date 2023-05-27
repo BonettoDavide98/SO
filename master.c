@@ -40,7 +40,7 @@ int main (int argc, char ** argv) {
 	pid_t child_pid, *kid_pids;
 	struct sembuf sops;
     char *args[11];
-	char *argss[8];
+	char *argss[9];
 	int *ports_shm_id_aval = malloc(parameters.SO_PORTI * sizeof(ports_shm_id_aval));
 	struct merce **ports_shm_ptr_aval = malloc(parameters.SO_PORTI * sizeof(ports_shm_ptr_aval));
 	int *ports_shm_id_req = malloc(parameters.SO_PORTI * sizeof(ports_shm_id_req));
@@ -56,6 +56,7 @@ int main (int argc, char ** argv) {
 	char banks[10];
 	char fill[10];
 	char speed[10];
+	char temp[30];
 
 	int master_msgq;
 	char master_msgq_str[3*sizeof(int)+1];
@@ -139,14 +140,14 @@ int main (int argc, char ** argv) {
 		for(int j = 1; j < parameters.SO_MERCI + 1; j++) {
 			if(rand()%2 == 1) {
 				ports_shm_ptr_aval[i][a].type = j;
-				ports_shm_ptr_aval[i][a].qty = 1 + rand() % parameters.SO_SIZE;
+				ports_shm_ptr_aval[i][a].qty = 1 + (rand() % parameters.SO_SIZE);
 				gettimeofday(&ports_shm_ptr_aval[i][a].spoildate, NULL);
 				ports_shm_ptr_aval[i][a].spoildate.tv_sec += rand() % (parameters.SO_MAX_VITA - parameters.SO_MIN_VITA);
 				printf("---ADDED: %d TONS OF %d TO PORT %d\n" , ports_shm_ptr_aval[i][a].qty, ports_shm_ptr_aval[i][a].type, i);
 				a = a + 1;
 			} else {
 				ports_shm_ptr_req[i][b].type = j;
-				ports_shm_ptr_req[i][b].qty = 1 + rand() % parameters.SO_SIZE;
+				ports_shm_ptr_req[i][b].qty = 1 + (rand() % parameters.SO_SIZE);
 				printf("---ADDED REQUEST: %d TONS OF %d TO PORT %d\n" , ports_shm_ptr_req[i][b].qty, ports_shm_ptr_req[i][b].type, i);
 				b = b + 1;
 			}
@@ -163,25 +164,25 @@ int main (int argc, char ** argv) {
 
 	//start port processes
 	for(int i = 0; i < parameters.SO_PORTI; i++) {
-		sprintf(shm_id_str, "%d", ports_shm_id_aval[i]);
-		sprintf(shm_id_req_str, "%d", ports_shm_id_req[i]);
-		sprintf(sem_id_str, "%d", sem_id);
-		sprintf(msgq_id_str, "%d", msgqueue_porto[i]);
-		sprintf(id, "%d", i);
-		sprintf(x, "%f", ports_positions[i].x);
-		sprintf(y, "%f", ports_positions[i].y);
-		sprintf(banks, "%d", parameters.SO_BANCHINE);
-		sprintf(fill, "%d", parameters.SO_FILL);
 		args[0] = PORTO;
-		args[1] = shm_id_str;
-		args[2] = sem_id_str;
-		args[3] = msgq_id_str;
-		args[4] = id;
-		args[5] = x;
-		args[6] = y;
-		args[7] = banks;
-		args[8] = shm_id_req_str;
-    	args[9] = fill;
+		sprintf(temp, "%d", ports_shm_id_aval[i]);
+		args[1] = temp;
+		sprintf(temp, "%d", sem_id);
+		args[2] = temp;
+		sprintf(temp, "%d", msgqueue_porto[i]);
+		args[3] = temp;
+		sprintf(temp, "%d", i);
+		args[4] = temp;
+		sprintf(temp, "%f", ports_positions[i].x);
+		args[5] = temp;
+		sprintf(temp, "%f", ports_positions[i].y);
+		args[6] = temp;
+		sprintf(temp, "%d", parameters.SO_BANCHINE);
+		args[7] = temp;
+		sprintf(temp, "%d", ports_shm_id_req[i]);
+		args[8] = temp;
+		sprintf(temp, "%d", parameters.SO_FILL);
+    	args[9] = temp;
     	args[10] = NULL;
 
 		switch(kid_pids[i] = fork()) {
@@ -197,20 +198,22 @@ int main (int argc, char ** argv) {
 
 	//start ship processes
 	for(int j = 0; j < parameters.SO_NAVI; j++) {
-		sprintf(msgq_id_str, "%d", msgqueue_nave[j]);
-		sprintf(master_msgq_str, "%d", master_msgq);
-		sprintf(id, "%d", j);
-		sprintf(x, "%f", (rand() / (double)RAND_MAX) * parameters.SO_LATO);
-		sprintf(y, "%f", (rand() / (double)RAND_MAX) * parameters.SO_LATO);
-		sprintf(speed, "%f", parameters.SO_SPEED);
 		argss[0] = NAVE;
-		argss[1] = msgq_id_str;
-		argss[2] = id;
-		argss[3] = x;
-		argss[4] = y;
-		argss[5] = speed;
-		argss[6] = master_msgq_str;
-		argss[7] = NULL;
+		sprintf(temp, "%d", msgqueue_nave[j]);
+		argss[1] = temp;
+		sprintf(temp, "%d", j);
+		argss[2] = temp;
+		sprintf(temp, "%f", (rand() / (double)RAND_MAX) * parameters.SO_LATO);
+		argss[3] = temp;
+		sprintf(temp, "%f", (rand() / (double)RAND_MAX) * parameters.SO_LATO);
+		argss[4] = temp;
+		sprintf(temp, "%f", parameters.SO_SPEED);
+		argss[5] = temp;
+		sprintf(temp, "%d", master_msgq);
+		argss[6] = temp;
+		sprintf(temp, "%d", parameters.SO_CAPACITY);
+		argss[7] = temp;
+		argss[8] = NULL;
 
 		//printf("TEST: %s %s\n", x, y);
 		

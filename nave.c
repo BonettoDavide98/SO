@@ -16,7 +16,7 @@ int main (int argc, char * argv[]) {
 	};
 	struct mesg_buffer message;
 	struct position pos;
-	double speed;
+	double speed = atoi(argv[5]);
 	char posx_str[20];
 	strcpy(posx_str, argv[3]);
 	char posy_str[20];
@@ -38,7 +38,7 @@ int main (int argc, char * argv[]) {
 	char text[20];
 
 	struct merce cargo[20];
-	int cargocapacity = 20;
+	int cargocapacity = atoi(argv[7]);
 	int cargocapacity_free = cargocapacity;
 
 	//initialize cargo
@@ -47,12 +47,12 @@ int main (int argc, char * argv[]) {
 		cargo[c].qty = 0;
 	}
 
-	sscanf(argv[5], "%lf", &speed);
-
 	int randomportflag = 0;
 	message.mesg_type = 1;
 
+	//ship loop, will last until interrupted by an external process
 	while(1) {
+		//ask master the closest port that asks for my largest merce
 		sleep(1);
 		removeSpoiled(cargo, atoi(argv[2]));
 		strcpy(message.mesg_text, argv[2]);
@@ -72,11 +72,6 @@ int main (int argc, char * argv[]) {
 
 		msgrcv(atoi(argv[1]), &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
 		printf("SHIP %s RECEIVED : %s\n", argv[2], message.mesg_text);
-		if(strcmp(message.mesg_text, "terminate") == 0) {
-			printf("NO MORE PORTS FOUND, TERMINATING SHIP %d\n", argv[2]);
-			break;
-		}
-
 
 		strcpy(msgq_id_porto, strtok(message.mesg_text, ":"));
 		strcpy(destx, strtok(NULL, ":"));
@@ -201,18 +196,28 @@ int main (int argc, char * argv[]) {
 }
 
 int getLargestCargo(struct merce * cargo) {
-	int max = 0;
-	int imax = 0;
+	int label = -1;
+	int temp = 0;
+	int maxlabel;
+	int max = -1;
+
 	for (int i = 0; i < 20; i++) {
-		if(cargo[i].type > 0 && cargo[i].qty > max) {
-			max = cargo[i].qty;
-			imax = cargo[i].type;
+		if(cargo[i].type != maxlabel && cargo[i].type > 0 && cargo[i].qty > 0) {
+			label = cargo[i].type;
+			for(int j = i; j < 20; j++) {
+				if(cargo[j].type == label && cargo[j].qty > 0) {
+					temp += cargo[i].qty;
+				}
+			}
+
+			if(temp > max) {
+				maxlabel = label;
+				max = temp;
+			}
 		}
 	}
 
-	if(imax >= 0) {
-		return imax;
-	}
+	return maxlabel;
 }
 
 void removeSpoiled(struct merce *available, int naveid) {

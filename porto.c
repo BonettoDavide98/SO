@@ -19,7 +19,7 @@ int main (int argc, char * argv[]) {
     	long mesg_type;
     	char mesg_text[100];
 	};
-	
+
 	srand(time(NULL));
 
 	struct mesg_buffer message; 
@@ -27,6 +27,7 @@ int main (int argc, char * argv[]) {
 	int docks = rand() % atoi(argv[7]);
 	int shm_id_aval, shm_id_req, sem_id = atoi(argv[2]);
 	int msgq_porto = atoi(argv[3]);
+	int fill = atoi(argv[9]);
 	struct merce *shm_ptr_aval, *shm_ptr_req;
 	key_t mem_key;
 	struct sembuf sops;
@@ -83,7 +84,7 @@ int main (int argc, char * argv[]) {
 
 		if(strcmp(operation, "dockrq") == 0) {
 			if(rear == docks -1) {
-				strcpy(message.mesg_text, "denied::");
+				strcpy(message.mesg_text, "denied:::");
 				msgsnd(atoi(ship_id), &message, (sizeof(long) + sizeof(char) * 100), 0);
 			} else {
 				if(front == -1) {
@@ -110,6 +111,9 @@ int main (int argc, char * argv[]) {
 			strcat(message.mesg_text, text);
 			strcat(message.mesg_text, ":");
 			sprintf(text, "%d", shm_id_aval);
+			strcat(message.mesg_text, text);
+			strcat(message.mesg_text, ":");
+			sprintf(text, "%d", fill);
 			strcat(message.mesg_text, text);
 			removeSpoiled(shm_ptr_aval, port_id);
 			msgsnd(queue[front], &message, (sizeof(long) + sizeof(char) * 100), 0);
@@ -139,8 +143,6 @@ int main (int argc, char * argv[]) {
 			}
 		}
 		printf("\n");
-		//clear spoiled and fulfilled
-		//check if free
 	}
 
 	exit(0);
