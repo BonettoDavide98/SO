@@ -45,7 +45,6 @@ int main (int argc, char * argv[]) {
 
 	sem_id = atoi(argv[2]);
 	port_id = argv[4];
-	docks = atoi(argv[7]);
 	//printf("POSIZIONE PORTO %d = %s %s\n", atoi(argv[4]), argv[5], argv[6]);
 
 	for(int i = 0; i < 3; i++) {
@@ -61,20 +60,43 @@ int main (int argc, char * argv[]) {
 		semop(sem_id, &sops, 1);
 	}
 
+	docks = atoi(argv[7]);
 	int occupied_docks = 0;
 	char ship_id[20];
 	char operation[20];
 	char text[20];
+	int queue[docks];
+	int front = -1;
+	int rear = -1;
 
 	while(1) {
 		msgrcv(atoi(argv[3]), &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
-		printf("RECEIVED : %s\n", message.mesg_text);
 		strcpy(operation, strtok(message.mesg_text, ":"));
 		strcpy(ship_id, strtok(NULL, ":"));
 
 		if(strcmp(operation, "dockrq") == 0) {
-			printf("NAVE HA ATTRACCATO\n");
-			//enqueue
+			if(rear == docks -1) {
+				strcpy(message.mesg_text, "denied::");
+				msgsnd(atoi(ship_id), &message, (sizeof(long) + sizeof(char) * 100), 0);
+			} else {
+				if(front == -1) {
+					front = 0;
+				}
+				rear += 1;
+				queue[rear] = atoi(ship_id);
+				printf("PORT %s ADDED A SHIP TO QUEUE\n", argv[4]);
+			}
+
+			
+		} else if(strcmp(operation, "dockfree") == 0) {
+			printf("PORT %s HAS FINISHED SERVING SHIP %s\n", argv[4], ship_id);
+			removeSpoiled(shm_ptr_aval, atoi(argv[4]));
+			occupied_docks -= 1;
+		}
+
+		if(occupied_docks < docks && front != -1) {
+			printf("PORT %s STARTED SERVING A SHIP\n", argv[4]);
+			occupied_docks += 1;
 			strcpy(message.mesg_text, "accept");
 			strcat(message.mesg_text, ":");
 			sprintf(text, "%d", shm_id_req);
@@ -83,11 +105,12 @@ int main (int argc, char * argv[]) {
 			sprintf(text, "%d", shm_id_aval);
 			strcat(message.mesg_text, text);
 			removeSpoiled(shm_ptr_aval, atoi(argv[4]));
-			msgsnd(atoi(ship_id), &message, (sizeof(long) + sizeof(char) * 100), 0);
-			occupied_docks += 1;
-		} else if(strcmp(operation, "dockfree") == 0) {
-			printf("NAVE SE NE E' ANDATA\n");
-			removeSpoiled(shm_ptr_aval, atoi(argv[4]));
+			msgsnd(queue[front], &message, (sizeof(long) + sizeof(char) * 100), 0);
+			front++;
+			if(front > rear) {
+				front = -1;
+				rear = -1;
+			}
 		}
 
 		printf("REQUESTS IN PORT %s: |", argv[4]);
@@ -96,7 +119,7 @@ int main (int argc, char * argv[]) {
 				if(shm_ptr_req[i].qty == 0) {
 					printf(" DONE -> ");
 				}
-				printf(" REQUESTS: TYPE %d QTY: %d |", shm_ptr_req[i].type, shm_ptr_req[i].qty);
+				printf(" TYPE %d QTY: %d |", shm_ptr_req[i].type, shm_ptr_req[i].qty);
 			}
 			
 		}

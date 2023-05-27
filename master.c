@@ -139,12 +139,12 @@ int main () {
 				ports_shm_ptr_aval[i][a].qty = 10 + rand() % maxrandommerce;
 				gettimeofday(&ports_shm_ptr_aval[i][a].spoildate, NULL);
 				ports_shm_ptr_aval[i][a].spoildate.tv_sec += rand() % (max_spoil - min_spoil);
-				printf("ADDED: %d TONS OF %d TO PORT %d\n" , ports_shm_ptr_aval[i][a].qty, ports_shm_ptr_aval[i][a].type, i);
+				printf("---ADDED: %d TONS OF %d TO PORT %d\n" , ports_shm_ptr_aval[i][a].qty, ports_shm_ptr_aval[i][a].type, i);
 				a = a + 1;
 			} else {
 				ports_shm_ptr_req[i][b].type = j + 1;
 				ports_shm_ptr_req[i][b].qty = 10 + rand() % maxrandommerce;
-				printf("ADDED REQUEST: %d TONS OF %d TO PORT %d\n" , ports_shm_ptr_req[i][b].qty, ports_shm_ptr_req[i][b].type, i);
+				printf("---ADDED REQUEST: %d TONS OF %d TO PORT %d\n" , ports_shm_ptr_req[i][b].qty, ports_shm_ptr_req[i][b].type, i);
 				b = b + 1;
 			}
 		}

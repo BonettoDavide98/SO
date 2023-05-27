@@ -49,32 +49,31 @@ int main (int argc, char * argv[]) {
 
 	sscanf(argv[5], "%lf", &speed);
 
+	int randomportflag = 0;
+	message.mesg_type = 1;
+
 	while(1) {
 		sleep(1);
-		/*printf("SHIP CARGO START LOOP: |");
-			for(int i = 0; i < 20; i++) {
-				if(cargo[i].qty > 0 && cargo[i].type > 0) {
-					printf(" %d TONS OF %d POS: %d |", cargo[i].qty, cargo[i].type, i);
-				}
-			}
-		printf("\n");*/
-
-		message.mesg_type = 1;
-		strcpy(string_out, argv[2]);
-		strcat(string_out, ":");
-		strcat(string_out, posx_str);
-		strcat(string_out, ":");
-		strcat(string_out, posy_str);
-		strcat(string_out, ":");
-		sprintf(text, "%d", getLargestCargo(cargo));
-		strcat(string_out, text);
-		strcpy(message.mesg_text, string_out);
+		removeSpoiled(cargo, atoi(argv[2]));
+		strcpy(message.mesg_text, argv[2]);
+		strcat(message.mesg_text, ":");
+		strcat(message.mesg_text, posx_str);
+		strcat(message.mesg_text, ":");
+		strcat(message.mesg_text, posy_str);
+		strcat(message.mesg_text, ":");
+		if(randomportflag == 0) {
+			sprintf(text, "%d", getLargestCargo(cargo));
+			strcat(message.mesg_text, text);
+		} else {
+			randomportflag = 0;
+			strcat(message.mesg_text, "0");
+		}
 		msgsnd(atoi(argv[6]), &message, (sizeof(long) + sizeof(char) * 100), 0);
 
 		msgrcv(atoi(argv[1]), &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
-		printf("NAVE %s RECEIVED : %s\n", argv[2], message.mesg_text);
+		printf("SHIP %s RECEIVED : %s\n", argv[2], message.mesg_text);
 		if(strcmp(message.mesg_text, "terminate") == 0) {
-			printf("NO MORE PORTS FOUND, TERMINATING NAVE %d\n", argv[2]);
+			printf("NO MORE PORTS FOUND, TERMINATING SHIP %d\n", argv[2]);
 			break;
 		}
 
@@ -82,21 +81,18 @@ int main (int argc, char * argv[]) {
 		strcpy(msgq_id_porto, strtok(message.mesg_text, ":"));
 		strcpy(destx, strtok(NULL, ":"));
 		strcpy(desty, strtok(NULL, ":"));
-		printf("NAVE %s SETTING COURSE TO %s %s\n", argv[2], destx, desty);
 		sscanf(destx, "%lf", &dest.x);
 		sscanf(desty, "%lf", &dest.y);
-		//printf("TIME: %f\n", (sqrt(pow((dest.x - pos.x),2) + pow((dest.y - pos.y),2)) / speed));
-		//printf("TRAVELTIME: %ld\n", (long) ((sqrt(pow((dest.x - pos.x),2) + pow((dest.y - pos.y),2)) / speed * 1000000000)));
 		traveltime = (long) ((sqrt(pow((dest.x - pos.x),2) + pow((dest.y - pos.y),2)) / speed * 1000000000));
 		tv1.tv_nsec = traveltime % 1000000000;
 		tv1.tv_sec = (int) ((traveltime - tv1.tv_nsec) / 1000000000);
-		printf("SEC: %d NANOSEC %ld\n", tv1.tv_sec, tv1.tv_nsec);
+		printf("SHIP %s SETTING COURSE TO %s %s, ETA: %d,%ld DAYS\n", argv[2], destx, desty, tv1.tv_sec, tv1.tv_nsec);
 		nanosleep(&tv1, &tv2);
 		pos.x = dest.x;
 		pos.y = dest.y;
 		strcpy(posx_str, destx);
 		strcpy(posy_str, desty);
-		printf("NAVE %s ARRIVED AT %f %f\n", argv[2], pos.x, pos.y);
+		printf("SHIP %s ARRIVED AT PORT IN %f %f, SENDING DOCKING REQUEST ...\n", argv[2], pos.x, pos.y);
 		
 		strcpy(message.mesg_text, "dockrq");
 		strcat(message.mesg_text, ":");
@@ -108,6 +104,7 @@ int main (int argc, char * argv[]) {
 		strcpy(shm_id_porto_req, strtok(NULL, ":"));
 		strcpy(shm_id_porto_aval, strtok(NULL, ":"));
 		if(strcmp(text, "accept") == 0) {
+			removeSpoiled(cargo, atoi(argv[2]));
 			if((struct merce *) (shm_ptr_porto_req = (struct merce *) shmat(atoi(shm_id_porto_req), NULL, 0)) == -1) {
 				printf("*** shmat error nave req ***\n");
 				exit(1);
@@ -122,14 +119,14 @@ int main (int argc, char * argv[]) {
 					for(int i = 0; i < 50 && shm_ptr_porto_req[i].type > 0; i++) {
 						if(cargo[k].type == shm_ptr_porto_req[i].type) {
 							if(cargo[k].qty >= shm_ptr_porto_req[i].qty) {
-								printf("OFFLOADING %d TO FULFILL REQUEST OF %d TONS OF %d\n", shm_ptr_porto_req[i].qty, shm_ptr_porto_req[i].qty, cargo[k].type);
+								printf("SHIP %s OFFLOADING %d TO FULFILL REQUEST OF %d TONS OF %d\n", argv[2], shm_ptr_porto_req[i].qty, shm_ptr_porto_req[i].qty, cargo[k].type);
 								cargo[k].qty -= shm_ptr_porto_req[i].qty;
 								shm_ptr_porto_req[i].qty = 0;
 								if(cargo[k].qty == 0) {
 									cargo[k].type = 0;
 								}
 							} else {
-								printf("OFFLOADING %d TO PARTIALLY FULFILL REQUEST OF %d TONS OF %d\n", cargo[k].qty, shm_ptr_porto_req[i].qty, cargo[k].type);
+								printf("SHIP %s OFFLOADING %d TO PARTIALLY FULFILL REQUEST OF %d TONS OF %d\n",  argv[2], cargo[k].qty, shm_ptr_porto_req[i].qty, cargo[k].type);
 								shm_ptr_porto_req[i].qty -= cargo[k].qty;
 								cargo[k].qty = 0;
 								cargo[k].type = 0;
@@ -145,16 +142,17 @@ int main (int argc, char * argv[]) {
 					cargocapacity_free = cargocapacity_free - cargo[i].qty;
 				}
 			}
-			printf("FREE CARGO: %d\n", cargocapacity_free);
 
 			for(int i = 0; i < 50 && cargocapacity_free > 0; i++) {
 				if(shm_ptr_porto_aval[i].type > 0 && shm_ptr_porto_aval[i].qty > 0) {
 					if(cargocapacity_free >= shm_ptr_porto_aval[i].qty) {
 						for(int j = 0; j < 20; j++) {
 							if(cargo[j].qty == 0 && cargo[j].type == 0) {
-								printf("LOADING %d TONS OF %d\n", shm_ptr_porto_aval[i].qty, shm_ptr_porto_aval[i].type);
+								printf("SHIP %s LOADING %d TONS OF %d\n", argv[2], shm_ptr_porto_aval[i].qty, shm_ptr_porto_aval[i].type);
 								cargo[j].type = shm_ptr_porto_aval[i].type;
 								cargo[j].qty = shm_ptr_porto_aval[i].qty;
+								cargo[j].spoildate.tv_sec = shm_ptr_porto_aval[i].spoildate.tv_sec;
+								cargo[j].spoildate.tv_usec = shm_ptr_porto_aval[i].spoildate.tv_usec;
 								cargocapacity_free -= cargo[j].qty;
 								shm_ptr_porto_aval[i].type = 0;
 								shm_ptr_porto_aval[i].qty = 0;
@@ -164,12 +162,13 @@ int main (int argc, char * argv[]) {
 					} else {
 						for(int j = 0; j < 20; j++) {
 							if(cargo[j].qty == 0 && cargo[j].type == 0) {
-								printf("LOADING %d OF %d\n", cargocapacity_free, shm_ptr_porto_aval[i].type);
+								printf("SHIP %s LOADING %d OF %d\n",  argv[2], cargocapacity_free, shm_ptr_porto_aval[i].type);
 								cargo[j].type = shm_ptr_porto_aval[i].type;
 								shm_ptr_porto_aval[i].qty -= cargocapacity_free;
 								cargo[j].qty = cargocapacity_free;
+								cargo[j].spoildate.tv_sec = shm_ptr_porto_aval[i].spoildate.tv_sec;
+								cargo[j].spoildate.tv_usec = shm_ptr_porto_aval[i].spoildate.tv_usec;
 								cargocapacity_free = 0;
-								printf("REMAINING: %d\n", shm_ptr_porto_aval[i].qty);
 								j = 20;
 							}
 						}
@@ -185,13 +184,16 @@ int main (int argc, char * argv[]) {
 			strcat(message.mesg_text, argv[2]);
 			msgsnd(atoi(msgq_id_porto), &message, (sizeof(long) + sizeof(char) * 100), 0);
 
-			printf("SHIP CARGO: |");
+			printf("SHIP %s CARGO: |", argv[2]);
 			for(int i = 0; i < 20; i++) {
 				if(cargo[i].qty > 0 && cargo[i].type > 0) {
-					printf(" %d TONS OF %d POS: %d |", cargo[i].qty, cargo[i].type, i);
+					printf(" %d TONS OF %d |", cargo[i].qty, cargo[i].type);
 				}
 			}
 			printf("\n");
+		} else {
+			printf("SHIP %s HAS BEEN DENIED DOCKING BECAUSE THE QUEUE WAS TOO LONG");
+			randomportflag = 1;
 		}
 	}
 
@@ -210,5 +212,25 @@ int getLargestCargo(struct merce * cargo) {
 
 	if(imax >= 0) {
 		return imax;
+	}
+}
+
+void removeSpoiled(struct merce *available, int naveid) {
+	struct timeval currenttime;
+	gettimeofday(&currenttime, NULL);
+	for(int i = 0; i < 20; i++) {
+		if(available[i].type > 0 && available[i].qty > 0) {
+			if(available[i].spoildate.tv_sec < currenttime.tv_sec) {
+				printf("REMOVED %d TONS OF %d FROM SHIP %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, naveid);
+				available[i].type = 0;
+				available[i].qty = 0;
+			} else if(available[i].spoildate.tv_sec == currenttime.tv_sec) {
+				if(available[i].spoildate.tv_usec <= currenttime.tv_usec) {
+				printf("REMOVED %d TONS OF %d FROM SHIP %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, naveid);
+					available[i].type = 0;
+					available[i].qty = 0;
+				}
+			}
+		}
 	}
 }
