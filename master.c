@@ -19,10 +19,10 @@ int main () {
 	};
 
 	//DA RENDERE LETTO DA FILE
-	int numporti = 10;
-	int nummerci = 3;
-	int maxrandommerce = 10;
-	int numnavi = 5;
+	int numporti = 8;
+	int nummerci = 5;
+	int maxrandommerce = 100;
+	int numnavi = 2;
 	int banchine = 2;
 	double max_x = 10;
 	double max_y = 10;
@@ -83,6 +83,7 @@ int main () {
 	ports_positions[3].x = max_x;
 	ports_positions[3].y = max_y;
 
+	int a,b;
 	//create ports
 	for(int i = 0; i < numporti; i++) {
 		if((int) (ports_shm_id_aval[i]  = shmget(IPC_PRIVATE, nummerci * sizeof(struct merce *), 0600)) < 0) {
@@ -120,16 +121,24 @@ int main () {
 		
 		printf("PORT CREATED IN %f %f\n", ports_positions[i].x, ports_positions[i].y);
 
+		for(int j = 0; j < 50; j++) {
+			ports_shm_ptr_aval[i][j].type = 0;
+			ports_shm_ptr_aval[i][j].qty = 0;
+			ports_shm_ptr_req[i][j].type = 0;
+			ports_shm_ptr_req[i][j].qty = 0;
+		}
+
+		a = 0;
+		b = 0;
 		for(int j = 0; j < nummerci; j++) {
-			int a = 0, b = 0;
 			if(rand()%2 == 1) {
 				ports_shm_ptr_aval[i][a].type = j + 1;
-				ports_shm_ptr_aval[i][a].qty = rand() % maxrandommerce;
+				ports_shm_ptr_aval[i][a].qty = 10 + rand() % maxrandommerce;
 				printf("ADDED: %d TONS OF %d TO PORT %d\n" , ports_shm_ptr_aval[i][a].qty, ports_shm_ptr_aval[i][a].type, i);
 				a = a + 1;
 			} else {
 				ports_shm_ptr_req[i][b].type = j + 1;
-				ports_shm_ptr_req[i][b].qty = rand() % maxrandommerce;
+				ports_shm_ptr_req[i][b].qty = 10 + rand() % maxrandommerce;
 				printf("ADDED REQUEST: %d TONS OF %d TO PORT %d\n" , ports_shm_ptr_req[i][b].qty, ports_shm_ptr_req[i][b].type, i);
 				b = b + 1;
 			}
@@ -274,7 +283,9 @@ int getRequesting(char *posx_s, char *posy_s, struct position * portpositions, s
 	sscanf(posy_s, "%lf", &currpos.y);
 	int imin = -1;
 	for(int i = 0; i < nporti; i++) {
-		for(int j = 0; j < 50; j++) {
+		//printf("CHECKING PORT %d:\n", i);
+		for(int j = 0; j < 50 && portsrequests[i][j].type > 0; j++) {
+		//printf("REQUEST %d: TYPE: %d QTY: %d\n", j, portsrequests[i][j].type, portsrequests[i][j].qty);
 			if(portsrequests[i][j].type == merce && portsrequests[i][j].qty > 0) {
 				if(sqrt(pow((portpositions[i].x - currpos.x),2) + pow((portpositions[i].y - currpos.y),2)) < sqrt(pow((minpos.x - currpos.x),2) + pow((minpos.y - currpos.y),2))) {
 					imin = i;
@@ -283,6 +294,10 @@ int getRequesting(char *posx_s, char *posy_s, struct position * portpositions, s
 				}
 			}
 		}
+	}
+	if(merce == 0) {
+		printf("NO MERCE SPECIFIED, RETURNING RANDOM PORT\n");
+		return rand() % nporti;
 	}
 	if(imin >= 0) {
 		printf("FOUND CLOSEST PORT %d REQUESTING MERCE %d\n", imin, merce);
