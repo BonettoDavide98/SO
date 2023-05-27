@@ -1,7 +1,9 @@
+#include <sys/time.h>
+
 struct merce {
     int type;
     int qty;
-    int lifeTime;
+    struct timeval spoildate;
 };
 
 struct position {

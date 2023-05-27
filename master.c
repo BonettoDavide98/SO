@@ -7,6 +7,7 @@
 #include <sys/sem.h>
 #include <string.h>
 #include <math.h>
+#include <sys/time.h>
 #include "merce.h"
 
 #define NAVE "nave.o"
@@ -27,6 +28,8 @@ int main () {
 	double max_x = 10;
 	double max_y = 10;
 	int shipsize = 10;
+	int min_spoil = 5;
+	int max_spoil = 20;
 	double shipspeed = 1;
 	char so_fill[1] = "5";
 	struct mesg_buffer message;
@@ -134,6 +137,8 @@ int main () {
 			if(rand()%2 == 1) {
 				ports_shm_ptr_aval[i][a].type = j + 1;
 				ports_shm_ptr_aval[i][a].qty = 10 + rand() % maxrandommerce;
+				gettimeofday(&ports_shm_ptr_aval[i][a].spoildate, NULL);
+				ports_shm_ptr_aval[i][a].spoildate.tv_sec += rand() % (max_spoil - min_spoil);
 				printf("ADDED: %d TONS OF %d TO PORT %d\n" , ports_shm_ptr_aval[i][a].qty, ports_shm_ptr_aval[i][a].type, i);
 				a = a + 1;
 			} else {

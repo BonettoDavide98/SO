@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/sem.h>
 #include <string.h>
+#include <sys/time.h>
 #include "merce.h"
 
 int main (int argc, char * argv[]) {
@@ -81,25 +82,31 @@ int main (int argc, char * argv[]) {
 			strcat(message.mesg_text, ":");
 			sprintf(text, "%d", shm_id_aval);
 			strcat(message.mesg_text, text);
+			removeSpoiled(shm_ptr_aval, atoi(argv[4]));
 			msgsnd(atoi(ship_id), &message, (sizeof(long) + sizeof(char) * 100), 0);
 			occupied_docks += 1;
 		} else if(strcmp(operation, "dockfree") == 0) {
 			printf("NAVE SE NE E' ANDATA\n");
+			removeSpoiled(shm_ptr_aval, atoi(argv[4]));
 		}
 
 		printf("REQUESTS IN PORT %s: |", argv[4]);
-		for(int i = 0; i < 50 && shm_ptr_req[i].type > 0; i++) {
-			if(shm_ptr_req[i].qty == 0) {
-				printf(" DONE -> ");
+		for(int i = 0; i < 50; i++) {
+			if(shm_ptr_req[i].type > 0) {
+				if(shm_ptr_req[i].qty == 0) {
+					printf(" DONE -> ");
+				}
+				printf(" REQUESTS: TYPE %d QTY: %d |", shm_ptr_req[i].type, shm_ptr_req[i].qty);
 			}
-			printf(" REQUESTS: TYPE %d QTY: %d |\n", shm_ptr_req[i].type, shm_ptr_req[i].qty);
 			
 		}
 		printf("\n");
 
 		printf("AVAILABLE IN PORT %s: |", argv[4]);
-		for(int i = 0; i < 50 && shm_ptr_aval[i].type > 0; i++) {
-			printf(" TYPE %d QTY: %d |", shm_ptr_aval[i].type, shm_ptr_aval[i].qty);
+		for(int i = 0; i < 50; i++) {
+			if(shm_ptr_aval[i].type > 0 && shm_ptr_aval[i].qty > 0) {
+				printf(" TYPE %d QTY: %d |", shm_ptr_aval[i].type, shm_ptr_aval[i].qty);
+			}
 		}
 		printf("\n");
 		//clear spoiled and fulfilled
@@ -109,8 +116,22 @@ int main (int argc, char * argv[]) {
 	exit(0);
 }
 
-void removeSpoiled(struct merce *available) {
+void removeSpoiled(struct merce *available, int portid) {
+	struct timeval currenttime;
+	gettimeofday(&currenttime, NULL);
 	for(int i = 0; i < 50; i++) {
-		//if(available[i].lifeTime)
+		if(available[i].type > 0 && available[i].qty > 0) {
+			if(available[i].spoildate.tv_sec < currenttime.tv_sec) {
+				printf("REMOVED %d TONS OF %d FROM PORT %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, portid);
+				available[i].type = 0;
+				available[i].qty = 0;
+			} else if(available[i].spoildate.tv_sec == currenttime.tv_sec) {
+				if(available[i].spoildate.tv_usec <= currenttime.tv_usec) {
+					printf("REMOVED %d TONS OF %d FROM PORT %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, portid);
+					available[i].type = 0;
+					available[i].qty = 0;
+				}
+			}
+		}
 	}
 }
