@@ -7,6 +7,7 @@
 #include <string.h>
 #include <math.h>
 #include <time.h>
+#include <signal.h>
 #include "merce.h"
 
 int main (int argc, char * argv[]) {
@@ -70,35 +71,44 @@ int main (int argc, char * argv[]) {
 		}
 		msgsnd(atoi(argv[6]), &message, (sizeof(long) + sizeof(char) * 100), 0);
 
+		//wait for master answer
 		msgrcv(atoi(argv[1]), &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
-		printf("SHIP %s RECEIVED : %s\n", argv[2], message.mesg_text);
+		//printf("SHIP %s RECEIVED : %s\n", argv[2], message.mesg_text);
 
+		//parse answer and go to specified location
 		strcpy(msgq_id_porto, strtok(message.mesg_text, ":"));
 		strcpy(destx, strtok(NULL, ":"));
 		strcpy(desty, strtok(NULL, ":"));
 		sscanf(destx, "%lf", &dest.x);
 		sscanf(desty, "%lf", &dest.y);
+		//calculate travel time
 		traveltime = (long) ((sqrt(pow((dest.x - pos.x),2) + pow((dest.y - pos.y),2)) / speed * 1000000000));
 		tv1.tv_nsec = traveltime % 1000000000;
 		tv1.tv_sec = (int) ((traveltime - tv1.tv_nsec) / 1000000000);
-		printf("SHIP %s SETTING COURSE TO %s %s, ETA: %d,%ld DAYS\n", argv[2], destx, desty, tv1.tv_sec, tv1.tv_nsec);
+		//printf("SHIP %s SETTING COURSE TO %s %s, ETA: %d,%ld DAYS\n", argv[2], destx, desty, tv1.tv_sec, tv1.tv_nsec);
+		//travel
 		nanosleep(&tv1, &tv2);
 		pos.x = dest.x;
 		pos.y = dest.y;
 		strcpy(posx_str, destx);
 		strcpy(posy_str, desty);
-		printf("SHIP %s ARRIVED AT PORT IN %f %f, SENDING DOCKING REQUEST ...\n", argv[2], pos.x, pos.y);
+		//printf("SHIP %s ARRIVED AT PORT IN %f %f, SENDING DOCKING REQUEST ...\n", argv[2], pos.x, pos.y);
 		
+		//send dock request to port
 		strcpy(message.mesg_text, "dockrq");
 		strcat(message.mesg_text, ":");
 		strcat(message.mesg_text, argv[1]);
 		msgsnd(atoi(msgq_id_porto), &message, (sizeof(long) + sizeof(char) * 100), 0);
 
+		//wait for port answer
 		msgrcv(atoi(argv[1]), &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
 		strcpy(text, strtok(message.mesg_text, ":"));
 		strcpy(shm_id_porto_req, strtok(NULL, ":"));
 		strcpy(shm_id_porto_aval, strtok(NULL, ":"));
+
+		//decide what to do based on port answer
 		if(strcmp(text, "accept") == 0) {
+			//if port accepted the request, start loading and unloading cargo
 			removeSpoiled(cargo, atoi(argv[2]));
 			if((struct merce *) (shm_ptr_porto_req = (struct merce *) shmat(atoi(shm_id_porto_req), NULL, 0)) == -1) {
 				printf("*** shmat error nave req ***\n");
@@ -179,15 +189,16 @@ int main (int argc, char * argv[]) {
 			strcat(message.mesg_text, argv[2]);
 			msgsnd(atoi(msgq_id_porto), &message, (sizeof(long) + sizeof(char) * 100), 0);
 
-			printf("SHIP %s CARGO: |", argv[2]);
+			//printf("SHIP %s CARGO: |", argv[2]);
 			for(int i = 0; i < 20; i++) {
 				if(cargo[i].qty > 0 && cargo[i].type > 0) {
-					printf(" %d TONS OF %d |", cargo[i].qty, cargo[i].type);
+					//printf(" %d TONS OF %d |", cargo[i].qty, cargo[i].type);
 				}
 			}
 			printf("\n");
 		} else {
-			printf("SHIP %s HAS BEEN DENIED DOCKING BECAUSE THE QUEUE WAS TOO LONG");
+			//if port declined access, ask master for a different port
+			//printf("SHIP %s HAS BEEN DENIED DOCKING BECAUSE THE QUEUE WAS TOO LONG");
 			randomportflag = 1;
 		}
 	}
@@ -195,6 +206,7 @@ int main (int argc, char * argv[]) {
 	exit(0);
 }
 
+//returns largest type of merce loaded in cargo
 int getLargestCargo(struct merce * cargo) {
 	int label = -1;
 	int temp = 0;
@@ -220,22 +232,31 @@ int getLargestCargo(struct merce * cargo) {
 	return maxlabel;
 }
 
+//remove spoiled merci
 void removeSpoiled(struct merce *available, int naveid) {
 	struct timeval currenttime;
 	gettimeofday(&currenttime, NULL);
 	for(int i = 0; i < 20; i++) {
 		if(available[i].type > 0 && available[i].qty > 0) {
 			if(available[i].spoildate.tv_sec < currenttime.tv_sec) {
-				printf("REMOVED %d TONS OF %d FROM SHIP %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, naveid);
+				//printf("REMOVED %d TONS OF %d FROM SHIP %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, naveid);
 				available[i].type = 0;
 				available[i].qty = 0;
 			} else if(available[i].spoildate.tv_sec == currenttime.tv_sec) {
 				if(available[i].spoildate.tv_usec <= currenttime.tv_usec) {
-				printf("REMOVED %d TONS OF %d FROM SHIP %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, naveid);
+				//printf("REMOVED %d TONS OF %d FROM SHIP %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, naveid);
 					available[i].type = 0;
 					available[i].qty = 0;
 				}
 			}
 		}
+	}
+}
+
+void sighandler(int sigid) {
+	if(sigid == SIGUSR1) {
+		printf("SEGNALE RICEVUTO DA PORTO\n");
+	} else if(sigid == SIGINT) {
+		printf("TEMPO SCADUTO, INTERRUZIONE ...\n");
 	}
 }

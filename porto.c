@@ -10,10 +10,6 @@
 #include <signal.h>
 #include "merce.h"
 
-void test() {
-	printf("SIGNAL RECEIVED!!!!!!!\n");
-}
-
 int main (int argc, char * argv[]) {
 	struct mesg_buffer {
     	long mesg_type;
@@ -25,7 +21,8 @@ int main (int argc, char * argv[]) {
 	struct mesg_buffer message; 
 	int port_id = atoi(argv[4]);
 	int docks = rand() % atoi(argv[7]);
-	int shm_id_aval, shm_id_req, sem_id = atoi(argv[2]);
+	int shm_id_aval, shm_id_req;
+	int sem_id = atoi(argv[2]);
 	int msgq_porto = atoi(argv[3]);
 	int fill = atoi(argv[9]);
 	struct merce *shm_ptr_aval, *shm_ptr_req;
@@ -37,19 +34,19 @@ int main (int argc, char * argv[]) {
 
 	//setup shared memory access
 	if((int) (shm_id_aval = atoi(argv[1])) < 0) {
-		printf("*** shmget error porto ***\n");
+		printf("*** shmget error porto aval ***\n");
 		exit(1);
 	}
 	if((struct merce *) (shm_ptr_aval = (struct merce *) shmat(shm_id_aval, NULL, 0)) == -1) {
-		printf("*** shmat error porto ***\n");
+		printf("*** shmat error porto aval ***\n");
 		exit(1);
 	}
 	if((int) (shm_id_req = atoi(argv[8])) < 0) {
-		printf("*** shmget error porto ***\n");
+		printf("*** shmget error porto req ***\n");
 		exit(1);
 	}
 	if((struct merce *) (shm_ptr_req = (struct merce *) shmat(shm_id_req, NULL, 0)) == -1) {
-		printf("*** shmat error porto ***\n");
+		printf("*** shmat error porto req ***\n");
 		exit(1);
 	}
 
@@ -67,6 +64,8 @@ int main (int argc, char * argv[]) {
 		sops.sem_op = 1;
 		semop(sem_id, &sops, 1);
 	}*/
+
+	signal(sighandler, SIGUSR1);
 
 	//start handling ships
 	int occupied_docks = 0;
@@ -92,7 +91,7 @@ int main (int argc, char * argv[]) {
 				}
 				rear += 1;
 				queue[rear] = atoi(ship_id);
-				printf("PORT %s ADDED A SHIP TO QUEUE\n", argv[4]);
+				//printf("PORT %s ADDED A SHIP TO QUEUE\n", argv[4]);
 			}
 
 			
@@ -124,25 +123,25 @@ int main (int argc, char * argv[]) {
 			}
 		}
 
-		printf("REQUESTS IN PORT %s: |", argv[4]);
+		//printf("REQUESTS IN PORT %s: |", argv[4]);
 		for(int i = 0; i < 50; i++) {
 			if(shm_ptr_req[i].type > 0) {
-				if(shm_ptr_req[i].qty == 0) {
+				/*if(shm_ptr_req[i].qty == 0) {
 					printf(" DONE -> ");
-				}
-				printf(" TYPE %d QTY: %d |", shm_ptr_req[i].type, shm_ptr_req[i].qty);
+				}*/
+				//printf(" TYPE %d QTY: %d |", shm_ptr_req[i].type, shm_ptr_req[i].qty);
 			}
 			
 		}
-		printf("\n");
+		//printf("\n");
 
-		printf("AVAILABLE IN PORT %s: |", argv[4]);
+		//printf("AVAILABLE IN PORT %s: |", argv[4]);
 		for(int i = 0; i < 50; i++) {
 			if(shm_ptr_aval[i].type > 0 && shm_ptr_aval[i].qty > 0) {
-				printf(" TYPE %d QTY: %d |", shm_ptr_aval[i].type, shm_ptr_aval[i].qty);
+				//printf(" TYPE %d QTY: %d |", shm_ptr_aval[i].type, shm_ptr_aval[i].qty);
 			}
 		}
-		printf("\n");
+		//printf("\n");
 	}
 
 	exit(0);
@@ -154,17 +153,25 @@ void removeSpoiled(struct merce *available, int portid) {
 	for(int i = 0; i < 50; i++) {
 		if(available[i].type > 0 && available[i].qty > 0) {
 			if(available[i].spoildate.tv_sec < currenttime.tv_sec) {
-				printf("REMOVED %d TONS OF %d FROM PORT %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, portid);
+				//printf("REMOVED %d TONS OF %d FROM PORT %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, portid);
 				available[i].type = 0;
 				available[i].qty = 0;
 			} else if(available[i].spoildate.tv_sec == currenttime.tv_sec) {
 				if(available[i].spoildate.tv_usec <= currenttime.tv_usec) {
-					printf("REMOVED %d TONS OF %d FROM PORT %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, portid);
+					//printf("REMOVED %d TONS OF %d FROM PORT %d DUE TO SPOILAGE\n", available[i].qty, available[i].type, portid);
 					available[i].type = 0;
 					available[i].qty = 0;
 				}
 			}
 		}
+	}
+}
+
+void sighandler(int sigid) {
+	if(sigid == SIGUSR1) {
+		printf("SEGNALE RICEVUTO DA PORTO\n");
+	} else if(sigid == SIGINT) {
+		printf("TEMPO SCADUTO, INTERRUZIONE ...\n");
 	}
 }
 
