@@ -40,17 +40,15 @@ int main (int argc, char ** argv) {
 
 	struct mesg_buffer message;
 	int sem_id, status;
-	pid_t child_pid;
+	pid_t child_pid, *kid_pids;
 	struct sembuf sops;
-    char *args[11];
-	char *argss[9];
+    char *args[12];
+	char *argss[10];
 	char *argst[5];
 	int *ports_shm_id_aval = malloc(parameters.SO_PORTI * sizeof(ports_shm_id_aval));
 	struct merce **ports_shm_ptr_aval = malloc(parameters.SO_PORTI * sizeof(ports_shm_ptr_aval));
 	int *ports_shm_id_req = malloc(parameters.SO_PORTI * sizeof(ports_shm_id_req));
 	struct merce **ports_shm_ptr_req = malloc(parameters.SO_PORTI * sizeof(ports_shm_ptr_req));
-	int kidpids_shm_id;
-	pid_t *kidpids_shm_ptr;
 	struct position *ports_positions = malloc(parameters.SO_PORTI * sizeof(struct position));
     char shm_id_str[3*sizeof(int)+1];
     char shm_id_req_str[3*sizeof(int)+1];
@@ -65,11 +63,11 @@ int main (int argc, char ** argv) {
 
 	srand(time(NULL));
 
-	for(int i = 0; i < 11; i++) {
+	for(int i = 0; i < 12; i++) {
 		args[i] = malloc(20);
 	}
 
-	for(int i = 0; i < 9; i++) {
+	for(int i = 0; i < 10; i++) {
 		argss[i] = malloc(20);
 	}
 
@@ -83,18 +81,7 @@ int main (int argc, char ** argv) {
 	sops.sem_num = 0;
 	sops.sem_flg = 0;
 
-	if((int) (kidpids_shm_id  = shmget(IPC_PRIVATE, sizeof(int), 0600)) < 0) {
-		printf("*** shmget kidpids error ***\n");
-		exit(1);
-	}
-
-	kidpids_shm_ptr = (pid_t*) malloc((parameters.SO_PORTI + parameters.SO_NAVI) * sizeof(pid_t));
-	if((pid_t *) (kidpids_shm_ptr = (pid_t *) shmat(kidpids_shm_id, NULL, 0)) == -1) {
-		printf("*** shmat kidpids error ***\n");
-		exit(1);
-	}
-
-	//kid_pids = malloc((parameters.SO_PORTI + parameters.SO_NAVI) * sizeof(*kid_pids));
+	kid_pids = malloc((parameters.SO_PORTI + parameters.SO_NAVI) * sizeof(*kid_pids));
 
 	if((master_msgq = msgget(IPC_PRIVATE, IPC_CREAT | 0600)) == -1) {
 		printf("*** master msgqueue error ***\n");
@@ -196,9 +183,10 @@ int main (int argc, char ** argv) {
 		sprintf(args[7], "%d", parameters.SO_BANCHINE);
 		sprintf(args[8], "%d", ports_shm_id_req[i]);
 		sprintf(args[9], "%d", parameters.SO_FILL);
-    	args[10] = NULL;
+		sprintf(args[10], "%d", parameters.SO_LOADSPEED);
+    	args[11] = NULL;
 
-		switch(kidpids_shm_ptr[i] = fork()) {
+		switch(kid_pids[i] = fork()) {
 			case -1:
 				break;
 			case 0:
@@ -219,11 +207,12 @@ int main (int argc, char ** argv) {
 		sprintf(argss[5], "%d", parameters.SO_SPEED);
 		sprintf(argss[6], "%d", master_msgq);
 		sprintf(argss[7], "%d", parameters.SO_CAPACITY);
-		argss[8] = NULL;
+		sprintf(argss[8], "%d", parameters.SO_STORM_DURATION);
+		argss[9] = NULL;
 
 		//printf("TEST: %s %s\n", x, y);
 		
-		switch(kidpids_shm_ptr[parameters.SO_PORTI + j] = fork()) {
+		switch(kid_pids[parameters.SO_PORTI + j] = fork()) {
 			case -1:
 				break;
 			case 0:
@@ -236,10 +225,20 @@ int main (int argc, char ** argv) {
 
 	//start timer process
 	strcpy(argst[0], TIMER);
-	sprintf(argst[1], "%d", kidpids_shm_id);
+	sprintf(argst[1], "%d", 30);
 	sprintf(argst[2], "%d", parameters.SO_NAVI);
 	sprintf(argst[3], "%d", parameters.SO_PORTI);
 	argst[4] = NULL;
+
+	switch(kid_pids[parameters.SO_PORTI + parameters.SO_NAVI] = fork()) {
+		case -1:
+			break;
+		case 0:
+    		execve(TIMER, argst, NULL);
+			break;
+		default:
+			break;
+	}
 
 	sops.sem_op = 1;
 	//semop(sem_id, &sops, SIGUSR1);
@@ -261,6 +260,7 @@ int main (int argc, char ** argv) {
 		strcpy(posy_str, strtok(NULL, ":"));
 		strcpy(merce, strtok(NULL, ":"));
 		printf("MASTER PARSED ID: %s, POSX: %s, POSY: %s, MERCE: %s\n", idin, posx_str, posy_str, merce);
+		kill(kid_pids[atoi(idin) + parameters.SO_PORTI], SIGUSR1);
 		idfind = getRequesting(posx_str, posy_str, ports_positions, ports_shm_ptr_req, atoi(merce), parameters.SO_PORTI);
 
 		message.mesg_type = 1;
@@ -308,7 +308,7 @@ int getRequesting(char *posx_s, char *posy_s, struct position * portpositions, s
 	minpos.y = 1000000;
 	sscanf(posx_s, "%lf", &currpos.x);
 	sscanf(posy_s, "%lf", &currpos.y);
-	int imin = -1;
+	int imin = 0;
 	for(int i = 0; i < nporti; i++) {
 		//printf("CHECKING PORT %d:\n", i);
 		for(int j = 0; j < 50 && portsrequests[i][j].type > 0; j++) {
@@ -343,12 +343,14 @@ int read_parameters_from_file(FILE *inputfile, struct parameters * parameters) {
 	strcpy(data, strtok(string, ","));
 	parameters->SO_NAVI = atoi(data);
 	if(parameters->SO_NAVI < 1) {
+		printf("SO_NAVI must be >= 1\n");
 		return 0;
 	}
 
 	strcpy(data, strtok(NULL, ","));
 	parameters->SO_PORTI = atoi(data);
 	if(parameters->SO_PORTI < 4) {
+		printf("SO_PORTI must be >= 4\n");
 		return 0;
 	}
 

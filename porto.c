@@ -10,6 +10,13 @@
 #include <signal.h>
 #include "merce.h"
 
+int port_id;
+
+void sighandler() {
+	printf("SEGNALE RICEVUTO DA PORTO\n");
+}
+
+
 int main (int argc, char * argv[]) {
 	struct mesg_buffer {
     	long mesg_type;
@@ -19,12 +26,13 @@ int main (int argc, char * argv[]) {
 	srand(time(NULL));
 
 	struct mesg_buffer message; 
-	int port_id = atoi(argv[4]);
-	int docks = rand() % atoi(argv[7]);
+	port_id = atoi(argv[4]);
+	int docks = 1 + (rand() % atoi(argv[7]));
 	int shm_id_aval, shm_id_req;
 	int sem_id = atoi(argv[2]);
 	int msgq_porto = atoi(argv[3]);
 	int fill = atoi(argv[9]);
+	int loadtime = atoi(argv[10]);
 	struct merce *shm_ptr_aval, *shm_ptr_req;
 	key_t mem_key;
 	struct sembuf sops;
@@ -65,11 +73,11 @@ int main (int argc, char * argv[]) {
 		semop(sem_id, &sops, 1);
 	}*/
 
-	signal(sighandler, SIGUSR1);
+	signal(SIGUSR1, sighandler);
 
 	//start handling ships
 	int occupied_docks = 0;
-	char ship_id[20];
+	char ship_id[30];
 	char operation[20];
 	char text[20];
 	int queue[docks * 2];
@@ -78,12 +86,13 @@ int main (int argc, char * argv[]) {
 
 	while(1) {
 		msgrcv(msgq_porto, &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
+		printf("MESSAGE RECEIVED BY PORT : %s\n", message.mesg_text);
 		strcpy(operation, strtok(message.mesg_text, ":"));
 		strcpy(ship_id, strtok(NULL, ":"));
 
 		if(strcmp(operation, "dockrq") == 0) {
-			if(rear == docks -1) {
-				strcpy(message.mesg_text, "denied:::");
+			if(rear == (docks * 2) - 1) {
+				strcpy(message.mesg_text, "denied:0:0:0:0");
 				msgsnd(atoi(ship_id), &message, (sizeof(long) + sizeof(char) * 100), 0);
 			} else {
 				if(front == -1) {
@@ -91,12 +100,14 @@ int main (int argc, char * argv[]) {
 				}
 				rear += 1;
 				queue[rear] = atoi(ship_id);
-				//printf("PORT %s ADDED A SHIP TO QUEUE\n", argv[4]);
+				printf("PORT %s ADDED A SHIP TO QUEUE\n", argv[4]);
 			}
 
 			
 		} else if(strcmp(operation, "dockfree") == 0) {
-			printf("PORT %s HAS FINISHED SERVING SHIP %s\n", argv[4], ship_id);
+			printf("PORT %s HAS FINISHED SERVING A SHIP\n", argv[4]);
+			strcpy(message.mesg_text, "freetogo");
+			msgsnd(atoi(ship_id), &message, (sizeof(long) + sizeof(char) * 100), 0);
 			removeSpoiled(shm_ptr_aval, port_id);
 			occupied_docks -= 1;
 		}
@@ -113,6 +124,9 @@ int main (int argc, char * argv[]) {
 			strcat(message.mesg_text, text);
 			strcat(message.mesg_text, ":");
 			sprintf(text, "%d", fill);
+			strcat(message.mesg_text, text);
+			strcat(message.mesg_text, ":");
+			sprintf(text, "%d", loadtime);
 			strcat(message.mesg_text, text);
 			removeSpoiled(shm_ptr_aval, port_id);
 			msgsnd(queue[front], &message, (sizeof(long) + sizeof(char) * 100), 0);
@@ -166,12 +180,3 @@ void removeSpoiled(struct merce *available, int portid) {
 		}
 	}
 }
-
-void sighandler(int sigid) {
-	if(sigid == SIGUSR1) {
-		printf("SEGNALE RICEVUTO DA PORTO\n");
-	} else if(sigid == SIGINT) {
-		printf("TEMPO SCADUTO, INTERRUZIONE ...\n");
-	}
-}
-
