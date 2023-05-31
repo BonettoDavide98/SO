@@ -82,7 +82,7 @@ int main (int argc, char * argv[]) {
 		spoiled[i] = 0;
 	}
 
-	int randomportflag = 0;
+	int randomportflag = 1;
 	message.mesg_type = 1;
 
 	signal(SIGUSR2, reporthandler);
@@ -113,14 +113,12 @@ int main (int argc, char * argv[]) {
 			randomportflag = 0;
 			strcat(message.mesg_text, "0");
 		}
-		//printf("SHIP %s ASKING MASTER %s\n", argv[2], message.mesg_text);
 		msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
 
 		//wait for master answer
 		while(msgrcv(atoi(argv[1]), &message, (sizeof(long) + sizeof(char) * 100), 1, 0) == -1) {
 			//loop until message is received
 		}
-		//printf("SHIP %s RECEIVED : %s\n", argv[2], message.mesg_text);
 
 		//parse answer and go to specified location
 		strcpy(msgq_id_porto, strtok(message.mesg_text, ":"));
@@ -132,8 +130,8 @@ int main (int argc, char * argv[]) {
 		traveltime = (long) ((sqrt(pow((dest.x - pos.x),2) + pow((dest.y - pos.y),2)) / speed * 1000000000));
 		tv1.tv_nsec = traveltime % 1000000000;
 		tv1.tv_sec = (int) ((traveltime - tv1.tv_nsec) / 1000000000);
-		//printf("SHIP %s SETTING COURSE TO %s %s, ETA: %d,%ld DAYS\n", argv[2], destx, desty, tv1.tv_sec, tv1.tv_nsec);
 		//travel
+		nanosleep(&tv1, &tv2);
 		while(nanosleep(&tv1, &tv2) == -1) {
 			tv1 = tv2;
 		}
@@ -141,18 +139,16 @@ int main (int argc, char * argv[]) {
 		pos.y = dest.y;
 		strcpy(posx_str, destx);
 		strcpy(posy_str, desty);
-		//printf("SHIP %s ARRIVED AT PORT IN %f %f, SENDING DOCKING REQUEST ...\n", argv[2], pos.x, pos.y);
 		
 		//send dock request to port
 		strcpy(message.mesg_text, "dockrq");
 		strcat(message.mesg_text, ":");
 		strcat(message.mesg_text, argv[1]);
-		//printf("MESSAGE FROM SHIP : %s\n", message.mesg_text);
 		msgsnd(atoi(msgq_id_porto), &message, (sizeof(long) + sizeof(char) * 100), 0);
 
 		//wait for port answer
 		while(msgrcv(atoi(argv[1]), &message, (sizeof(long) + sizeof(char) * 100), 1, 0) == -1) {
-			//loop until message is received
+
 		}
 		strcpy(text, strtok(message.mesg_text, ":"));
 			
@@ -209,13 +205,11 @@ int main (int argc, char * argv[]) {
 								tonstomove += loadCargo2(cargo, shm_ptr_porto_aval[i].type, splitton, shm_ptr_porto_aval[i].spoildate, max_slots);
 								shm_ptr_porto_aval[i].qty -= splitton;
 								cargocapacity_free -= splitton;
-								//printf("SENT %d TONS OF MERCE %d\n", splitton, shm_ptr_porto_aval[i].type);
 								shm_ptr_porto_req[shm_ptr_porto_aval[i].type + (num_merci * 2)] += splitton;
 								flag = 1;
 							} else {
 								tonstomove += loadCargo(cargo, shm_ptr_porto_aval[i], max_slots);
 								cargocapacity_free -= shm_ptr_porto_aval[i].qty;
-								//printf("SENT %d TONS OF MERCE %d\n", shm_ptr_porto_aval[i].qty, shm_ptr_porto_aval[i].type);
 								shm_ptr_porto_req[shm_ptr_porto_aval[i].type + (num_merci * 2)] += shm_ptr_porto_aval[i].qty;
 								shm_ptr_porto_aval[i].type = -1;
 								shm_ptr_porto_aval[i].qty = -1;
@@ -228,49 +222,34 @@ int main (int argc, char * argv[]) {
 					}
 				}
 
+				//sleep for loadtime * tonstomove
+				if(tonstomove > 0) {
+					tv1.tv_sec = (int) (tonstomove / loadtime);
+					tv1.tv_nsec = (long) tonstomove / (long) loadtime * 1000000000 % 1000000000;
+					while(nanosleep(&tv1, &tv2) == -1) {
+						tv1 = tv2;
+					}
+				}
+
 				//unblock the resource
 				sops.sem_num = 0;
 				sops.sem_flg = 0;
 				sops.sem_op = 1;
 				semop(portsemaphore, &sops, 1);
 
-				//sleep for loadtime * tonstomove
-				if(tonstomove > 0) {
-					tv1.tv_sec = (int) (tonstomove / loadtime);
-					tv1.tv_nsec = (long) tonstomove / (long) loadtime * 1000000000 % 1000000000;
-					//printf("SHIP %s LOADING/OFFLOADING %d TONS, ETA: %d.%ld DAYS\n", argv[2], tonstomove, tv1.tv_sec, tv1.tv_nsec);
-					while(nanosleep(&tv1, &tv2) == -1) {
-						tv1 = tv2;
-					}
-				}
-
-				strcpy(message.mesg_text, "dockfree");
-				strcat(message.mesg_text, ":");
-				strcat(message.mesg_text, argv[1]);
-				msgsnd(atoi(msgq_id_porto), &message, (sizeof(long) + sizeof(char) * 100), 0);
-				//wait for answer before exiting dock
-				while(msgrcv(atoi(argv[1]), &message, (sizeof(long) + sizeof(char) * 100), 1, 0) == -1) {
-					//loop until message is received
-				}
 				currentplace = 0;
-				//printf("RIPARTITA\n");
 
 				hascargo = 0;
-				//printf("SHIP %s CARGO: |", argv[2]);
 				for(int i = 0; i < max_slots; i++) {
 					if(cargo[i].type == 0) {
 						i = max_slots;
 					} else if(cargo[i].qty > 0 && cargo[i].type > 0) {
-						//i = max_slots;
 						hascargo = 1;
-						//printf(" %d TONS OF %d |", cargo[i].qty, cargo[i].type);
 					}
 				}
 			}
-			//printf("\n");
 		} else {
 			//if port declined access, ask master for a different port
-			//printf("SHIP %s HAS BEEN DENIED DOCKING BECAUSE THE QUEUE WAS TOO LONG");
 			randomportflag = 1;
 		}
 	}
@@ -302,13 +281,11 @@ void removeSpoiled(struct merce *available) {
 	for(int i = 0; i < num_merci * 5; i++) {
 		if(available[i].type > 0 && available[i].qty > 0) {
 			if(available[i].spoildate.tv_sec < currenttime.tv_sec) {
-				//printf("REMOVED %d TONS OF %d FROM SHIP DUE TO SPOILAGE\n", available[i].qty, available[i].type);
 				spoiled[available[i].type] += available[i].qty;
 				available[i].type = -1;
 				available[i].qty = -1;
 			} else if(available[i].spoildate.tv_sec == currenttime.tv_sec) {
 				if(available[i].spoildate.tv_usec <= currenttime.tv_usec) {
-					//printf("REMOVED %d TONS OF %d FROM SHIP DUE TO SPOILAGE\n", available[i].qty, available[i].type);
 					spoiled[available[i].type] += available[i].qty;
 					available[i].type = -1;
 					available[i].qty = -1;
@@ -361,13 +338,11 @@ int unloadCargo(struct merce * cargo, int * requests, int max_slots, int num_mer
 						cargo[i].type = -1;
 					}
 					requests[cargo[i].type + num_merci] += requests[cargo[i].type];
-					printf("UNLOAD DAY %d SHIP %d REQUEST[%d]= %d\n", day, shipid, (cargo[i].type + num_merci), requests[cargo[i].type + num_merci]);
 					tonstomove += requests[cargo[i].type];
 					requests[cargo[i].type] = -1;
 				} else if(requests[cargo[i].type] > 0) {
 					requests[cargo[i].type] -= cargo[i].qty;
 					requests[cargo[i].type + num_merci] += cargo[i].qty;
-					printf("UNLOAD DAY %d SHIP %d REQUEST[%d]= %d\n", day, shipid, (cargo[i].type + num_merci), requests[cargo[i].type + num_merci]);
 					tonstomove += cargo[i].qty;
 					cargo[i].type = -1;
 					cargo[i].qty = -1;
@@ -405,7 +380,6 @@ void reporthandler() {
 }
 
 void endreporthandler() {
-	//printf("TERMINATING NAVE...\n");
 	struct mesg_buffer message;
 	message.mesg_type = 1;
 	char temp[20];

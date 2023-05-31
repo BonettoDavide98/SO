@@ -11,9 +11,6 @@
 #include <signal.h>
 #include "merce.h"
 
-int swellduration;
-int shipstoswell = 0;
-
 int port_id;
 int master_msgq;
 int num_merci;
@@ -21,7 +18,7 @@ int *shm_ptr_req;
 struct merce *shm_ptr_aval;
 int day = 0;
 int docks;
-int occupied_docks;
+int port_sem_id;
 int * spoiled;
 
 void reporthandler();
@@ -44,7 +41,6 @@ int main (int argc, char * argv[]) {
 	int loadtime = atoi(argv[10]);
 	num_merci = atoi(argv[11]);
 	master_msgq = atoi(argv[12]);
-	swellduration = atoi(argv[13]);
 	key_t mem_key;
 	spoiled = malloc((1 +num_merci) * sizeof(int));
 	struct sembuf sops;
@@ -80,8 +76,8 @@ int main (int argc, char * argv[]) {
 	}
 
 	//create semaphore to oversee shared memory writing
-	int port_sem_id = semget(IPC_PRIVATE, 1, 0600);
-	semctl(port_sem_id, 0, SETVAL, 1);
+	port_sem_id = semget(IPC_PRIVATE, 1, 0600);
+	semctl(port_sem_id, 0, SETVAL, docks);
 
 	//wait until parent unlocks semaphore
 	sops.sem_num = 0;
@@ -90,47 +86,18 @@ int main (int argc, char * argv[]) {
 	semop(master_sem_id, &sops, 1);
 
 	//start handling ships
-	occupied_docks = 0;
 	char ship_id[30];
 	char operation[20];
 	char text[20];
-	int queue[docks * 2];
-	int front = -1;
-	int rear = -1;
 
 	while(1) {
 		while(msgrcv(msgq_porto, &message, (sizeof(long) + sizeof(char) * 100), 1, 0) == -1) {
 			//loop until message is received
 		}
-		//printf("MESSAGE RECEIVED BY PORT : %s\n", message.mesg_text);
 		strcpy(operation, strtok(message.mesg_text, ":"));
 		strcpy(ship_id, strtok(NULL, ":"));
 
 		if(strcmp(operation, "dockrq") == 0) {
-			if(rear == (docks * 2) - 1) {
-				strcpy(message.mesg_text, "denied:0:0:0:0");
-				msgsnd(atoi(ship_id), &message, (sizeof(long) + sizeof(char) * 100), 0);
-			} else {
-				if(front == -1) {
-					front = 0;
-				}
-				rear += 1;
-				queue[rear] = atoi(ship_id);
-				//printf("PORT %s ADDED A SHIP TO QUEUE\n", argv[4]);
-			}
-
-			
-		} else if(strcmp(operation, "dockfree") == 0) {
-			//printf("PORT %s HAS FINISHED SERVING A SHIP\n", argv[4]);
-			strcpy(message.mesg_text, "freetogo:");
-			msgsnd(atoi(ship_id), &message, (sizeof(long) + sizeof(char) * 100), 0);
-			removeSpoiled(shm_ptr_aval, shm_ptr_req[0]);
-			occupied_docks -= 1;
-		}
-
-		if(occupied_docks < docks && front != -1) {
-			//printf("PORT %s STARTED SERVING A SHIP\n", argv[4]);
-			occupied_docks += 1;
 			strcpy(message.mesg_text, "accept");
 			strcat(message.mesg_text, ":");
 			sprintf(text, "%d", shm_id_req);
@@ -144,32 +111,9 @@ int main (int argc, char * argv[]) {
 			strcat(message.mesg_text, ":");
 			sprintf(text, "%d", port_sem_id);
 			strcat(message.mesg_text, text);
+			msgsnd(atoi(ship_id), &message, (sizeof(long) + sizeof(char) * 100), 0);
 			removeSpoiled(shm_ptr_aval, shm_ptr_req[0]);
-			msgsnd(queue[front], &message, (sizeof(long) + sizeof(char) * 100), 0);
-			front++;
-			if(front > rear) {
-				front = -1;
-				rear = -1;
-			}
 		}
-
-		/*printf("PORT %d AVAILABLE: |", port_id);
-		for(int j = 0; j < shm_ptr_req[0]; j++) {
-			if(shm_ptr_aval[j].type == 0) {
-				j = shm_ptr_req[0];
-			} else if(shm_ptr_aval[j].qty > 0) {
-				printf(" %d TONS OF %d |", shm_ptr_aval[j].qty, shm_ptr_aval[j].type);
-			}
-		}
-		printf("\n");
-
-		printf("PORT %d REQUESTS: |", port_id);
-		for(int j = 1; j < num_merci * 3 + 1; j++) {
-			printf(" %d TONS OF %d |", shm_ptr_req[j], j);
-			if(j % num_merci == 0) {
-				printf("\n");
-			}
-		}*/
 	}
 
 	exit(0);
@@ -181,13 +125,11 @@ void removeSpoiled(struct merce *available, int limit) {
 	for(int i = 0; i < limit; i++) {
 		if(available[i].type > 0 && available[i].qty > 0) {
 			if(available[i].spoildate.tv_sec < currenttime.tv_sec) {
-				//printf("REMOVED %d TONS OF %d FROM PORT DUE TO SPOILAGE\n", available[i].qty, available[i].type);
 				spoiled[available[i].type] += available[i].qty;
 				available[i].type = -1;
 				available[i].qty = 0;
 			} else if(available[i].spoildate.tv_sec == currenttime.tv_sec) {
 				if(available[i].spoildate.tv_usec <= currenttime.tv_usec) {
-					//printf("REMOVED %d TONS OF %d FROM PORT DUE TO SPOILAGE\n", available[i].qty, available[i].type);
 					spoiled[available[i].type] += available[i].qty;
 					available[i].type = -1;
 					available[i].qty = 0;
@@ -205,7 +147,6 @@ void reporthandler() {
 
 	day++;
 
-	printf("PORTO %d DAY %d\n",port_id, day);
 	removeSpoiled(shm_ptr_aval, num_merci * day);
 	strcpy(message.mesg_text, "p");
 	strcat(message.mesg_text, ":");
@@ -231,14 +172,13 @@ void reporthandler() {
 	sprintf(temp, "%d", docks);
 	strcat(message.mesg_text, temp);	//total docks
 	strcat(message.mesg_text, ":");
-	sprintf(temp, "%d", occupied_docks);
+	sprintf(temp, "%d", docks - semctl(port_sem_id, 0, GETVAL));
 	strcat(message.mesg_text, temp);	//occupied docks
 
 	msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
 }
 
 void endreporthandler() {
-	//printf("TERMINATING PORTO...\n");
 	struct mesg_buffer message;
 	message.mesg_type = 1;
 	char temp[20];
@@ -250,7 +190,6 @@ void endreporthandler() {
 		strcat(message.mesg_text, temp);
 	}
 
-	printf("SENDING TERMINATION MESSAGE FROM PORTO\n");
 	msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
 
 	exit(0);
