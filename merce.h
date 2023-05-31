@@ -3,7 +3,7 @@
 struct merce {
     int type;
     int qty;
-    struct timeval spoildate;
+    int spoildate;
 };
 
 struct position {

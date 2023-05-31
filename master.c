@@ -123,7 +123,7 @@ int main (int argc, char ** argv) {
 			exit(1);
 		}
 
-		ports_shm_ptr_aval[i] = malloc((10 * parameters.SO_MERCI) * sizeof(struct merce));
+		ports_shm_ptr_aval[i] = malloc((parameters.SO_MERCI) * sizeof(struct merce));
 		if((struct merce *) (ports_shm_ptr_aval[i] = (struct merce *) shmat(ports_shm_id_aval[i], NULL, 0)) == -1) {
 			printf("*** shmat aval error ***\n");
 			exit(1);
@@ -179,8 +179,7 @@ int main (int argc, char ** argv) {
 					ports_shm_ptr_aval[i][a].type = j;
 					ports_shm_ptr_aval[i][a].qty = temparray[j];
 					totalgenerated[j] += temparray[j];
-					gettimeofday(&ports_shm_ptr_aval[i][a].spoildate, NULL);
-					ports_shm_ptr_aval[i][a].spoildate.tv_sec += parameters.SO_MIN_VITA + (rand() % (parameters.SO_MAX_VITA - parameters.SO_MIN_VITA + 1) + 1);
+					ports_shm_ptr_aval[i][a].spoildate += parameters.SO_MIN_VITA + (rand() % (parameters.SO_MAX_VITA - parameters.SO_MIN_VITA + 1) - 1);
 					a += 1;
 					break;
 				case 1:
@@ -466,7 +465,7 @@ int main (int argc, char ** argv) {
 
 	for(int i = 0; i < parameters.SO_PORTI; i++) {
 		//add merce still in port
-		for(int j = 0; j < day * parameters.SO_MERCI; j++) {
+		for(int j = 0; j < parameters.SO_MERCI; j++) {
 			if(ports_shm_ptr_aval[i][j].type > 0 && ports_shm_ptr_aval[i][j].qty > 0) {
 				totalport[ports_shm_ptr_aval[i][j].type] += ports_shm_ptr_aval[i][j].qty;
 			}
@@ -539,19 +538,6 @@ int getRequesting(char *posx_s, char *posy_s, struct position * portpositions, i
 		return imin;
 	}
 	return rand() % nporti;
-}
-
-void addMerceToPort(int qty, int type, int max_vita, int min_vita, struct merce * port, int limit, int * totalgenerated) {
-	for(int i = 0; i < limit; i++) {
-		if(port[i].type <= 0) {
-			port[i].qty = qty;
-			port[i].type = type;
-			gettimeofday(&port[i].spoildate, NULL);
-			port[i].spoildate.tv_sec += min_vita + (rand() % (max_vita - min_vita));
-			totalgenerated[type] += qty;
-			i = limit;
-		}
-	}
 }
 
 //load parameters from an input file; parameters must be separated by comma

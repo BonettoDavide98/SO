@@ -96,6 +96,7 @@ int main (int argc, char * argv[]) {
 		}
 		strcpy(operation, strtok(message.mesg_text, ":"));
 		strcpy(ship_id, strtok(NULL, ":"));
+		removeSpoiled(shm_ptr_aval);
 
 		if(strcmp(operation, "dockrq") == 0) {
 			strcpy(message.mesg_text, "accept");
@@ -112,28 +113,22 @@ int main (int argc, char * argv[]) {
 			sprintf(text, "%d", port_sem_id);
 			strcat(message.mesg_text, text);
 			msgsnd(atoi(ship_id), &message, (sizeof(long) + sizeof(char) * 100), 0);
-			removeSpoiled(shm_ptr_aval, shm_ptr_req[0]);
+			removeSpoiled(shm_ptr_aval);
 		}
 	}
 
 	exit(0);
 }
 
-void removeSpoiled(struct merce *available, int limit) {
+void removeSpoiled(struct merce *available) {
 	struct timeval currenttime;
 	gettimeofday(&currenttime, NULL);
-	for(int i = 0; i < limit; i++) {
+	for(int i = 0; i < num_merci; i++) {
 		if(available[i].type > 0 && available[i].qty > 0) {
-			if(available[i].spoildate.tv_sec < currenttime.tv_sec) {
+			if(available[i].spoildate < day) {
 				spoiled[available[i].type] += available[i].qty;
 				available[i].type = -1;
 				available[i].qty = 0;
-			} else if(available[i].spoildate.tv_sec == currenttime.tv_sec) {
-				if(available[i].spoildate.tv_usec <= currenttime.tv_usec) {
-					spoiled[available[i].type] += available[i].qty;
-					available[i].type = -1;
-					available[i].qty = 0;
-				}
 			}
 		}
 	}
@@ -147,7 +142,7 @@ void reporthandler() {
 
 	day++;
 
-	removeSpoiled(shm_ptr_aval, num_merci * day);
+	removeSpoiled(shm_ptr_aval);
 	strcpy(message.mesg_text, "p");
 	strcat(message.mesg_text, ":");
 	sprintf(temp, "%d", port_id);		//port id

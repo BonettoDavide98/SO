@@ -43,7 +43,7 @@ int main (int argc, char * argv[]) {
 	sscanf(argv[3], "%lf", &pos.x);
 	sscanf(argv[4], "%lf", &pos.y);
 	num_merci = atoi(argv[9]);
-	int max_slots = num_merci * 50;
+	int max_slots = num_merci * 30;
 	struct sembuf sops;
 	int master_sem_id = atoi(argv[10]);
 	spoiled = malloc((1 + num_merci) * sizeof(int));
@@ -195,7 +195,7 @@ int main (int argc, char * argv[]) {
 
 				while(flag) {
 					flag = 0;
-					for(int i = 0; i < shm_ptr_porto_req[0] && cargocapacity_free > 0 && shm_ptr_porto_aval[i].type != 0; i++) {
+					for(int i = 0; i < num_merci && cargocapacity_free > 0 && shm_ptr_porto_aval[i].type != 0; i++) {
 						if(shm_ptr_porto_aval[i].type > 0 && shm_ptr_porto_aval[i].qty > 0) {
 							if(splitton > cargocapacity_free) {
 								splitton = cargocapacity_free;
@@ -276,20 +276,12 @@ int getLargestCargo(struct merce * cargo, int max_slots) {
 
 //remove spoiled merci
 void removeSpoiled(struct merce *available) {
-	struct timeval currenttime;
-	gettimeofday(&currenttime, NULL);
 	for(int i = 0; i < num_merci * 5; i++) {
 		if(available[i].type > 0 && available[i].qty > 0) {
-			if(available[i].spoildate.tv_sec < currenttime.tv_sec) {
+			if(available[i].spoildate < day) {
 				spoiled[available[i].type] += available[i].qty;
 				available[i].type = -1;
 				available[i].qty = -1;
-			} else if(available[i].spoildate.tv_sec == currenttime.tv_sec) {
-				if(available[i].spoildate.tv_usec <= currenttime.tv_usec) {
-					spoiled[available[i].type] += available[i].qty;
-					available[i].type = -1;
-					available[i].qty = -1;
-				}
 			}
 		}
 	}
@@ -297,7 +289,7 @@ void removeSpoiled(struct merce *available) {
 
 int loadCargo(struct merce * cargo, struct merce mercetoload, int max_slots) {
 	for(int i = 0; i < max_slots; i++) {
-		if(cargo[i].type == mercetoload.type && cargo[i].spoildate.tv_sec == mercetoload.spoildate.tv_sec && cargo[i].spoildate.tv_usec == mercetoload.spoildate.tv_usec) {
+		if(cargo[i].type == mercetoload.type && cargo[i].spoildate == mercetoload.spoildate) {
 			cargo[i].qty += mercetoload.qty;
 			return mercetoload.qty;
 		}
@@ -309,9 +301,9 @@ int loadCargo(struct merce * cargo, struct merce mercetoload, int max_slots) {
 	return 0;
 }
 
-int loadCargo2(struct merce * cargo, int type, int qty, struct timeval spoildate, int max_slots) {
+int loadCargo2(struct merce * cargo, int type, int qty, int spoildate, int max_slots) {
 	for(int i = 0; i < max_slots; i++) {
-		if(cargo[i].type == type && cargo[i].spoildate.tv_sec == spoildate.tv_sec && cargo[i].spoildate.tv_usec == spoildate.tv_usec) {
+		if(cargo[i].type == type && cargo[i].spoildate == spoildate) {
 			cargo[i].qty += qty;
 			return qty;
 		}
