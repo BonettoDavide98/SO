@@ -26,7 +26,7 @@ int main (int argc, char * argv[]) {
 	semop(master_sem_id, &sops, 1);
 
     message.mesg_type = 1;
-    for(int i = 1; i < ((days + 1) * 24); i++) {
+    for(int i = 0; i < days; i++) {
         sleep(1);
         strcpy(message.mesg_text, "d");
         msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);

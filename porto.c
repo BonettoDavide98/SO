@@ -205,7 +205,6 @@ void reporthandler() {
 
 	day++;
 
-	printf("PORTO %d DAY %d\n",port_id, day);
 	removeSpoiled(shm_ptr_aval, num_merci * day);
 	strcpy(message.mesg_text, "p");
 	strcat(message.mesg_text, ":");
@@ -250,7 +249,6 @@ void endreporthandler() {
 		strcat(message.mesg_text, temp);
 	}
 
-	printf("SENDING TERMINATION MESSAGE FROM PORTO\n");
 	msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
 
 	exit(0);

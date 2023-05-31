@@ -314,27 +314,26 @@ int main (int argc, char ** argv) {
 	int timeended = 0;
 	int allrequestfulfilled = 0;
 	int allmerciempty = 0;
+	printf("START LOOP\n");
 	while(flag) {
 		msgrcv(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
 		switch(message.mesg_text[0]) {
 			case 's':
-				if(timeended == 0) {
-					strtok(message.mesg_text, ":");
-					strcpy(dayr, strtok(NULL, ":"));
-					strcpy(tempstr, strtok(NULL, ":"));
-					switch(atoi(tempstr)) {
-						case 0:
-							reports[atoi(dayr)].seawithcargo++;
-							break;
-						case 1:
-							reports[atoi(dayr)].seawithoutcargo++;
-							break;
-						case 2:
-							reports[atoi(dayr)].docked++;
-							break;
-						default:
-							break;
-					}
+				strtok(message.mesg_text, ":");
+				strcpy(dayr, strtok(NULL, ":"));
+				strcpy(tempstr, strtok(NULL, ":"));
+				switch(atoi(tempstr)) {
+					case 0:
+						reports[atoi(dayr)].seawithcargo++;
+						break;
+					case 1:
+						reports[atoi(dayr)].seawithoutcargo++;
+						break;
+					case 2:
+						reports[atoi(dayr)].docked++;
+						break;
+					default:
+						break;
 				}
 				break;
 			case 'p':
@@ -353,6 +352,7 @@ int main (int argc, char ** argv) {
 				}
 				break;
 			case 'd':
+				printf("MESSAGE: %s\n", message.mesg_text);
 				for(int i = 0; i < parameters.SO_NAVI + parameters.SO_PORTI; i++) {
 					kill(kid_pids[i], SIGUSR2);
 				}
@@ -389,7 +389,7 @@ int main (int argc, char ** argv) {
 					}
 				}
 
-				if(allrequestfulfilled == 1 || allmerciempty == 1) {
+				if(timeended == 0 && (allrequestfulfilled == 1 || allmerciempty == 1)) {
 					timeended = 1;
 					strcpy(message.mesg_text, "t");
 					msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
@@ -465,7 +465,6 @@ int main (int argc, char ** argv) {
 		}
 	}
 
-	printf("OUT OF WHILE LOOP\n");
 	int totalsent[parameters.SO_MERCI + 1];
 	int totaldelivered[parameters.SO_MERCI + 1];
 	int totalport[parameters.SO_MERCI + 1];

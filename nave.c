@@ -361,13 +361,13 @@ int unloadCargo(struct merce * cargo, int * requests, int max_slots, int num_mer
 						cargo[i].type = -1;
 					}
 					requests[cargo[i].type + num_merci] += requests[cargo[i].type];
-					printf("UNLOAD DAY %d SHIP %d REQUEST[%d]= %d\n", day, shipid, (cargo[i].type + num_merci), requests[cargo[i].type + num_merci]);
+					//printf("UNLOAD DAY %d SHIP %d REQUEST[%d]= %d\n", day, shipid, (cargo[i].type + num_merci), requests[cargo[i].type + num_merci]);
 					tonstomove += requests[cargo[i].type];
 					requests[cargo[i].type] = -1;
 				} else if(requests[cargo[i].type] > 0) {
 					requests[cargo[i].type] -= cargo[i].qty;
 					requests[cargo[i].type + num_merci] += cargo[i].qty;
-					printf("UNLOAD DAY %d SHIP %d REQUEST[%d]= %d\n", day, shipid, (cargo[i].type + num_merci), requests[cargo[i].type + num_merci]);
+					//printf("UNLOAD DAY %d SHIP %d REQUEST[%d]= %d\n", day, shipid, (cargo[i].type + num_merci), requests[cargo[i].type + num_merci]);
 					tonstomove += cargo[i].qty;
 					cargo[i].type = -1;
 					cargo[i].qty = -1;
