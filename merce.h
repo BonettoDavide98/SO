@@ -10,6 +10,11 @@ struct position {
     double x;
     double y;
 };
+	
+struct mesg_buffer {
+   	long mesg_type;
+   	char mesg_text[100];
+};
 
 struct parameters {
     int SO_NAVI;
@@ -28,4 +33,19 @@ struct parameters {
     int SO_STORM_DURATION;
     int SO_SWELL_DURATION;
     int SO_MAELSTORM;
+};
+
+struct report {
+    int seawithcargo;
+    int seawithoutcargo;
+    int docked;
+    struct portstatus * ports;
+};
+
+struct portstatus {
+    int mercepresent;
+    int mercesent;
+    int mercereceived;
+    int docksocc;
+    int dockstot;
 };

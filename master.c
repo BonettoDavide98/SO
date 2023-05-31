@@ -9,8 +9,10 @@
 #include <math.h>
 #include <sys/time.h>
 #include <signal.h>
+#include <time.h>
 #include "merce.h"
 
+#define MAX_DAYS 30
 #define NAVE "nave.o"
 #define PORTO "porto.o"
 #define TIMER "timer.o"
@@ -38,50 +40,58 @@ int main (int argc, char ** argv) {
 		return(1);
 	}
 
+	struct report reports[MAX_DAYS + 1];
+	for(int i = 0; i < MAX_DAYS + 1; i++) {
+		reports[i].seawithcargo = 0;
+		reports[i].seawithoutcargo = 0;
+		reports[i].docked = 0;
+		reports[i].ports = malloc(parameters.SO_PORTI * sizeof(struct portstatus));
+		for(int j = 0; j < parameters.SO_PORTI; j++) {
+			reports[i].ports[j].mercepresent = 0;
+			reports[i].ports[j].mercesent = 0;
+			reports[i].ports[j].mercereceived = 0;
+			reports[i].ports[j].docksocc = 0;
+			reports[i].ports[j].dockstot = 0;
+		}
+	}
+
+	int day = 0;
 	struct mesg_buffer message;
 	int sem_id, status;
 	pid_t child_pid, *kid_pids;
 	struct sembuf sops;
-    char *args[12];
-	char *argss[10];
-	char *argst[5];
+    char *args[15];
+	char *argss[12];
+	char *argst[8];
 	int *ports_shm_id_aval = malloc(parameters.SO_PORTI * sizeof(ports_shm_id_aval));
 	struct merce **ports_shm_ptr_aval = malloc(parameters.SO_PORTI * sizeof(ports_shm_ptr_aval));
 	int *ports_shm_id_req = malloc(parameters.SO_PORTI * sizeof(ports_shm_id_req));
-	struct merce **ports_shm_ptr_req = malloc(parameters.SO_PORTI * sizeof(ports_shm_ptr_req));
+	int **ports_shm_ptr_req = malloc(parameters.SO_PORTI * sizeof(ports_shm_ptr_req));
 	struct position *ports_positions = malloc(parameters.SO_PORTI * sizeof(struct position));
-    char shm_id_str[3*sizeof(int)+1];
-    char shm_id_req_str[3*sizeof(int)+1];
-    char sem_id_str[3*sizeof(int)+1];
-    char msgq_id_str[3*sizeof(int)];
 
 	int master_msgq;
-	char master_msgq_str[3*sizeof(int)+1];
 
 	int *msgqueue_porto = malloc(parameters.SO_PORTI * sizeof(int));
 	int *msgqueue_nave = malloc(parameters.SO_NAVI * sizeof(int));
 
 	srand(time(NULL));
 
-	for(int i = 0; i < 12; i++) {
+	for(int i = 0; i < 15; i++) {
 		args[i] = malloc(20);
 	}
 
-	for(int i = 0; i < 10; i++) {
+	for(int i = 0; i < 12; i++) {
 		argss[i] = malloc(20);
 	}
 
-	for(int i = 0; i < 5; i++) {
+	for(int i = 0; i < 8; i++) {
 		argst[i] = malloc(20);
 	}
 
 	sem_id = semget(IPC_PRIVATE, 1, 0600);
 	semctl(sem_id, 0, SETVAL, 0);
 
-	sops.sem_num = 0;
-	sops.sem_flg = 0;
-
-	kid_pids = malloc((parameters.SO_PORTI + parameters.SO_NAVI) * sizeof(*kid_pids));
+	kid_pids = malloc((parameters.SO_PORTI + parameters.SO_NAVI + 1) * sizeof(*kid_pids));
 
 	if((master_msgq = msgget(IPC_PRIVATE, IPC_CREAT | 0600)) == -1) {
 		printf("*** master msgqueue error ***\n");
@@ -100,27 +110,32 @@ int main (int argc, char ** argv) {
 	ports_positions[3].x = parameters.SO_LATO;
 	ports_positions[3].y = parameters.SO_LATO;
 
-	int a,b;
+	int a,b,tot,temp;
+	int * totalgenerated = malloc((1 + parameters.SO_MERCI) * sizeof(int));
+	for(int i = 0; i < parameters.SO_MERCI + 1; i++) {
+		totalgenerated[i] = 0;
+	}
+
 	//create ports
 	for(int i = 0; i < parameters.SO_PORTI; i++) {
-		if((int) (ports_shm_id_aval[i]  = shmget(IPC_PRIVATE, parameters.SO_MERCI * sizeof(struct merce *), 0600)) < 0) {
+		if((int) (ports_shm_id_aval[i]  = shmget(IPC_PRIVATE, sizeof(int), 0600)) < 0) {
 			printf("*** shmget aval error ***\n");
 			exit(1);
 		}
 
-		ports_shm_ptr_aval[i] = malloc(50 * sizeof(struct merce));
+		ports_shm_ptr_aval[i] = malloc((10 * parameters.SO_MERCI) * sizeof(struct merce));
 		if((struct merce *) (ports_shm_ptr_aval[i] = (struct merce *) shmat(ports_shm_id_aval[i], NULL, 0)) == -1) {
 			printf("*** shmat aval error ***\n");
 			exit(1);
 		}
 
-		if((int) (ports_shm_id_req[i]  = shmget(IPC_PRIVATE, parameters.SO_MERCI * sizeof(struct merce *), 0600)) < 0) {
+		if((int) (ports_shm_id_req[i]  = shmget(IPC_PRIVATE, sizeof(int), 0600)) < 0) {
 			printf("*** shmget req error ***\n");
 			exit(1);
 		}
 
-		ports_shm_ptr_req[i] = malloc(50 * sizeof(struct merce));
-		if((struct merce *) (ports_shm_ptr_req[i] = (struct merce *) shmat(ports_shm_id_req[i], NULL, 0)) == -1) {
+		ports_shm_ptr_req[i] = malloc((parameters.SO_MERCI * 3 + 1) * sizeof(int));
+		if((int *) (ports_shm_ptr_req[i] = (int *) shmat(ports_shm_id_req[i], NULL, 0)) == -1) {
 			printf("*** shmat req error ***\n");
 			exit(1);
 		}
@@ -137,31 +152,50 @@ int main (int argc, char ** argv) {
 		
 		//printf("PORT CREATED IN %f %f\n", ports_positions[i].x, ports_positions[i].y);
 
-		for(int j = 0; j < 50; j++) {
+		for(int j = 0; j < parameters.SO_MERCI; j++) {
 			ports_shm_ptr_aval[i][j].type = 0;
 			ports_shm_ptr_aval[i][j].qty = 0;
-			ports_shm_ptr_req[i][j].type = 0;
-			ports_shm_ptr_req[i][j].qty = 0;
+		}
+
+		for(int j = 0; j < parameters.SO_MERCI * 2 + 1; j++) {
+			ports_shm_ptr_req[i][j] = 0;
+		}
+		
+		int *temparray = malloc((parameters.SO_MERCI + 1) * sizeof(int));
+		for(int j = 0; j < parameters.SO_MERCI + 1; j++) {
+			temparray[j] = 0;
+		}
+
+		tot = 0;
+		
+		while(tot + parameters.SO_SIZE <= parameters.SO_FILL/parameters.SO_PORTI) {
+			temp = 1 + (rand() % parameters.SO_SIZE);
+			temparray[1 + (rand() % parameters.SO_MERCI)] += temp;
+			tot += temp;
 		}
 
 		a = 0;
-		b = 0;
 		for(int j = 1; j < parameters.SO_MERCI + 1; j++) {
-			if(rand()%2 == 1) {
-				ports_shm_ptr_aval[i][a].type = j;
-				ports_shm_ptr_aval[i][a].qty = 1 + (rand() % parameters.SO_SIZE);
-				gettimeofday(&ports_shm_ptr_aval[i][a].spoildate, NULL);
-				ports_shm_ptr_aval[i][a].spoildate.tv_sec += rand() % (parameters.SO_MAX_VITA - parameters.SO_MIN_VITA);
-				//printf("---ADDED: %d TONS OF %d TO PORT %d\n" , ports_shm_ptr_aval[i][a].qty, ports_shm_ptr_aval[i][a].type, i);
-				a = a + 1;
-			} else {
-				ports_shm_ptr_req[i][b].type = j;
-				ports_shm_ptr_req[i][b].qty = 1 + (rand() % parameters.SO_SIZE);
-				//printf("---ADDED REQUEST: %d TONS OF %d TO PORT %d\n" , ports_shm_ptr_req[i][b].qty, ports_shm_ptr_req[i][b].type, i);
-				b = b + 1;
+			switch(rand() % 2) {
+				case 0:
+					ports_shm_ptr_aval[i][a].type = j;
+					ports_shm_ptr_aval[i][a].qty = temparray[j];
+					totalgenerated[j] += temparray[j];
+					gettimeofday(&ports_shm_ptr_aval[i][a].spoildate, NULL);
+					ports_shm_ptr_aval[i][a].spoildate.tv_sec += parameters.SO_MIN_VITA + (rand() % (parameters.SO_MAX_VITA - parameters.SO_MIN_VITA + 1) - 1);
+					//printf("ADDED %d TONS OF %d TO PORT %d\n", temparray[j], j, i);
+					a += 1;
+					break;
+				case 1:
+					ports_shm_ptr_req[i][j] = temparray[j];
+					//printf("ADDED REQUEST OF %d TONS OF %d TO PORT %d\n", temparray[j], j, i);
+					break;
 			}
 		}
+		ports_shm_ptr_req[i][0] = a;
+		free(temparray);
 	}
+	printf("FINE CREAZIONE PORTI\n");
 
 	//create ships
 	for(int j = 0; j < parameters.SO_NAVI; j++) {
@@ -171,6 +205,7 @@ int main (int argc, char ** argv) {
 		}
 	}
 
+	int random;
 	//start port processes
 	for(int i = 0; i < parameters.SO_PORTI; i++) {
 		strcpy(args[0], PORTO);
@@ -180,11 +215,14 @@ int main (int argc, char ** argv) {
 		sprintf(args[4], "%d", i);
 		sprintf(args[5], "%f", ports_positions[i].x);
 		sprintf(args[6], "%f", ports_positions[i].y);
-		sprintf(args[7], "%d", parameters.SO_BANCHINE);
+		sprintf(args[7], "%d", 1 + (rand() % parameters.SO_BANCHINE));
 		sprintf(args[8], "%d", ports_shm_id_req[i]);
 		sprintf(args[9], "%d", parameters.SO_FILL);
 		sprintf(args[10], "%d", parameters.SO_LOADSPEED);
-    	args[11] = NULL;
+		sprintf(args[11], "%d", parameters.SO_MERCI);
+		sprintf(args[12], "%d", master_msgq);
+		sprintf(args[13], "%d", parameters.SO_SWELL_DURATION);
+    	args[14] = NULL;
 
 		switch(kid_pids[i] = fork()) {
 			case -1:
@@ -196,7 +234,7 @@ int main (int argc, char ** argv) {
 				break;
 		}
 	}
-
+	
 	//start ship processes
 	for(int j = 0; j < parameters.SO_NAVI; j++) {
 		strcpy(argss[0], NAVE);
@@ -208,7 +246,9 @@ int main (int argc, char ** argv) {
 		sprintf(argss[6], "%d", master_msgq);
 		sprintf(argss[7], "%d", parameters.SO_CAPACITY);
 		sprintf(argss[8], "%d", parameters.SO_STORM_DURATION);
-		argss[9] = NULL;
+		sprintf(argss[9], "%d", parameters.SO_MERCI);
+		sprintf(argss[10], "%d", sem_id);
+		argss[11] = NULL;
 
 		//printf("TEST: %s %s\n", x, y);
 		
@@ -225,10 +265,13 @@ int main (int argc, char ** argv) {
 
 	//start timer process
 	strcpy(argst[0], TIMER);
-	sprintf(argst[1], "%d", 30);
+	sprintf(argst[1], "%d", MAX_DAYS);
 	sprintf(argst[2], "%d", parameters.SO_NAVI);
 	sprintf(argst[3], "%d", parameters.SO_PORTI);
-	argst[4] = NULL;
+	sprintf(argst[4], "%d", master_msgq);
+	sprintf(argst[5], "%d", sem_id);
+	sprintf(argst[6], "%d", parameters.SO_MAELSTORM);
+	argst[7] = NULL;
 
 	switch(kid_pids[parameters.SO_PORTI + parameters.SO_NAVI] = fork()) {
 		case -1:
@@ -240,47 +283,225 @@ int main (int argc, char ** argv) {
 			break;
 	}
 
-	sops.sem_op = 1;
-	//semop(sem_id, &sops, SIGUSR1);
+	//start every child simultaneously
+	sleep(1);
+	sops.sem_num = 0;
+	sops.sem_flg = 0;
+	sops.sem_op = parameters.SO_PORTI + parameters.SO_NAVI + 2;
+	semop(sem_id, &sops, 1);
 
 	char idin[10];
 	char posx_str[20];
 	char posy_str[20];
 	char merce[20];
-	char string_out[100];
 	int idfind;
 	char x[20];
 	char y[20];
+	char dayr[3];
+	char tempstr[20];
+	char portid[20];
+	int spoilednave[parameters.SO_MERCI + 1];
+	int spoiledporto[parameters.SO_MERCI + 1];
+	for(int i = 0; i < parameters.SO_MERCI + 1; i++) {
+		spoiledporto[i] = 0;
+		spoilednave[i] = 0;
+	}
+	int num_kid_pids_navi = parameters.SO_NAVI;
+	int num_kid_pids_porti = parameters.SO_PORTI;
 
 	//handle messages
-	while(1) {
+	int flag = 1;
+	int timeended = 0;
+	int allrequestfulfilled = 0;
+	int allmerciempty = 0;
+	while(flag) {
 		msgrcv(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 1, 0);
-		strcpy(idin, strtok(message.mesg_text, ":"));
-		strcpy(posx_str, strtok(NULL, ":"));
-		strcpy(posy_str, strtok(NULL, ":"));
-		strcpy(merce, strtok(NULL, ":"));
-		printf("MASTER PARSED ID: %s, POSX: %s, POSY: %s, MERCE: %s\n", idin, posx_str, posy_str, merce);
-		kill(kid_pids[atoi(idin) + parameters.SO_PORTI], SIGUSR1);
-		idfind = getRequesting(posx_str, posy_str, ports_positions, ports_shm_ptr_req, atoi(merce), parameters.SO_PORTI);
+		switch(message.mesg_text[0]) {
+			case 's':
+				if(timeended == 0) {
+					strtok(message.mesg_text, ":");
+					strcpy(dayr, strtok(NULL, ":"));
+					strcpy(tempstr, strtok(NULL, ":"));
+					switch(atoi(tempstr)) {
+						case 0:
+							reports[atoi(dayr)].seawithcargo++;
+							break;
+						case 1:
+							reports[atoi(dayr)].seawithoutcargo++;
+							break;
+						case 2:
+							reports[atoi(dayr)].docked++;
+							break;
+						default:
+							break;
+					}
+				}
+				break;
+			case 'p':
+				if(timeended == 0) {
+					strtok(message.mesg_text, ":");
+					strcpy(portid, strtok(NULL, ":"));
+					strcpy(dayr, strtok(NULL, ":"));
+					strcpy(tempstr, strtok(NULL, ":"));
+					reports[atoi(dayr)].ports[atoi(portid)].mercesent = atoi(tempstr);
+					strcpy(tempstr, strtok(NULL, ":"));
+					reports[atoi(dayr)].ports[atoi(portid)].mercereceived = atoi(tempstr);
+					strcpy(tempstr, strtok(NULL, ":"));
+					reports[atoi(dayr)].ports[atoi(portid)].dockstot = atoi(tempstr);
+					strcpy(tempstr, strtok(NULL, ":"));
+					reports[atoi(dayr)].ports[atoi(portid)].docksocc = atoi(tempstr);
+				}
+				break;
+			case 'd':
+				for(int i = 0; i < parameters.SO_NAVI + parameters.SO_PORTI; i++) {
+					kill(kid_pids[i], SIGUSR2);
+				}
+				
+				//count total avaiable merci
+				for(int i = 0; i < parameters.SO_PORTI; i++) {
+					for(int j = 0; j < parameters.SO_MERCI * (day + 1); j++) {
+						if(ports_shm_ptr_aval[i][j].type == 0) {
+							j = parameters.SO_MERCI * (day + 1);
+						} else if(ports_shm_ptr_aval[i][j].type > 0 && ports_shm_ptr_aval[i][j].qty > 0) {
+							reports[day].ports[i].mercepresent += ports_shm_ptr_aval[i][j].qty;
+						}
+					}
+				}
 
-		message.mesg_type = 1;
-		if(idfind < 0) {
-			strcpy(message.mesg_text, "terminate");
-			msgsnd(msgqueue_nave[atoi(idin)], &message, (sizeof(long) + sizeof(char) * 100), 0);
+				//check if there is at least one merce available
+				allmerciempty = 1;
+				for(int i = 0; i < parameters.SO_PORTI; i++) {
+					if(reports[day].ports[i].mercepresent > 0) {
+						allmerciempty = 0;
+						i = parameters.SO_PORTI;
+					}
+				}
+
+				//check if every request has been fulfilled
+				allrequestfulfilled = 1;
+				for(int i = 0; i < parameters.SO_PORTI; i++) {
+					for(int j = 1; j <= parameters.SO_MERCI; j++) {
+						if(ports_shm_ptr_req[i][j] > 0) {
+							allrequestfulfilled = 0;
+							j = parameters.SO_MERCI + 1;
+							i = parameters.SO_PORTI;
+						}
+					}
+				}
+
+				if(allrequestfulfilled == 1 || allmerciempty == 1) {
+					timeended = 1;
+					strcpy(message.mesg_text, "t");
+					msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
+					kill(kid_pids[parameters.SO_PORTI + parameters.SO_NAVI], SIGINT);
+					printf("SIMULATION INTERRUPTED\n");
+				}
+
+				//print report
+				printf("-----------------------------------\n");
+				if(day < MAX_DAYS && timeended == 0) {
+					printf("DAY %d REPORT\n", day);
+				} else {
+					printf("FINAL REPORT\n", day);
+				}
+				printf("SHIP BY SEA WITHOUT CARGO: %d\n", reports[day].seawithoutcargo);
+				printf("SHIP BY SEA WITH CARGO: %d\n", reports[day].seawithcargo);
+				printf("SHIP DOCKED: %d\n", reports[day].docked);
+				for(int i = 0; i < parameters.SO_PORTI; i++) {
+					printf("PORT %d: %d TONS OF MERCE AVAILABLE | ", i, reports[day].ports[i].mercepresent);
+					printf("SENT %d TONS OF MERCE | ", reports[day].ports[i].mercesent);
+					printf("RECEIVED %d TONS OF MERCE | ", reports[day].ports[i].mercereceived);
+					printf("%d/%d OCCUPIED DOCKS\n", reports[day].ports[i].docksocc, reports[day].ports[i].dockstot);
+				}
+				printf("-----------------------------------\n");
+				day++;
+				break;
+			case 't':
+				for(int i = 0; i < parameters.SO_NAVI + parameters.SO_PORTI + 1; i++) {
+					kill(kid_pids[i], SIGINT);
+				}
+				timeended = 1;
+				break;
+			case 'P':
+				strtok(message.mesg_text, ":");
+				for(int i = 1; i < parameters.SO_MERCI + 1; i++) {
+					strcpy(tempstr, strtok(NULL, ":"));
+					spoiledporto[i] += atoi(tempstr);
+				}
+				num_kid_pids_porti--;
+				break;
+			case 'S' :
+				strtok(message.mesg_text, ":");
+				for(int i = 1; i < parameters.SO_MERCI + 1; i++) {
+					strcpy(tempstr, strtok(NULL, ":"));
+					spoilednave[i] += atoi(tempstr);
+				}
+				num_kid_pids_navi--;
+				break;
+			default :
+				if(timeended == 0) {
+					strcpy(idin, strtok(message.mesg_text, ":"));
+					strcpy(posx_str, strtok(NULL, ":"));
+					strcpy(posy_str, strtok(NULL, ":"));
+					strcpy(merce, strtok(NULL, ":"));
+					//printf("MASTER PARSED ID: %s, POSX: %s, POSY: %s, MERCE: %s\n", idin, posx_str, posy_str, merce);
+					idfind = getRequesting(posx_str, posy_str, ports_positions, ports_shm_ptr_req, atoi(merce), parameters.SO_PORTI, parameters.SO_MERCI);
+
+					message.mesg_type = 1;
+					sprintf(x, "%f", ports_positions[idfind].x);
+					sprintf(y, "%f", ports_positions[idfind].y);
+					sprintf(message.mesg_text, "%d", msgqueue_porto[idfind]);
+					strcat(message.mesg_text, ":");
+					strcat(message.mesg_text, x);
+					strcat(message.mesg_text, ":");
+					strcat(message.mesg_text, y);
+					msgsnd(msgqueue_nave[atoi(idin)], &message, (sizeof(long) + sizeof(char) * 100), 0);
+				}
+				break;
 		}
-		sprintf(x, "%f", ports_positions[idfind].x);
-		sprintf(y, "%f", ports_positions[idfind].y);
-		sprintf(msgq_id_str, "%d", msgqueue_porto[idfind]);
-		strcpy(message.mesg_text, msgq_id_str);
-		strcat(message.mesg_text, ":");
-		strcat(message.mesg_text, x);
-		strcat(message.mesg_text, ":");
-		strcat(message.mesg_text, y);
-		msgsnd(msgqueue_nave[atoi(idin)], &message, (sizeof(long) + sizeof(char) * 100), 0);
+
+		if(num_kid_pids_navi <= 0 && num_kid_pids_porti <= 0) {
+			flag = 0;
+		}
 	}
 
-	while((child_pid = wait(&status)) != -1) {
-		dprintf(2, "Pid=%d. Sender (PID=%d) terminated with status 0x%04X\n", getpid(), child_pid, status);
+	printf("OUT OF WHILE LOOP\n");
+	int totalsent[parameters.SO_MERCI + 1];
+	int totaldelivered[parameters.SO_MERCI + 1];
+	int totalport[parameters.SO_MERCI + 1];
+	for(int i = 0; i < parameters.SO_MERCI + 1; i++) {
+		totalsent[i] = 0;
+		totaldelivered[i] = 0;
+		totalport[i] = 0;
+	}
+
+	for(int i = 0; i < parameters.SO_PORTI; i++) {
+		//add merce still in port
+		for(int j = 0; j < day * parameters.SO_MERCI; j++) {
+			if(ports_shm_ptr_aval[i][j].type > 0 && ports_shm_ptr_aval[i][j].qty > 0) {
+				totalport[ports_shm_ptr_aval[i][j].type] += ports_shm_ptr_aval[i][j].qty;
+			}
+		}
+
+		//add merce received
+		for(int j = 1; j <= parameters.SO_MERCI; j++) {
+			if(ports_shm_ptr_req[i][j + parameters.SO_MERCI] > 0) {
+				totaldelivered[j] += ports_shm_ptr_req[i][j + parameters.SO_MERCI];
+			}
+		}
+
+		//add merce sent
+		for(int j = 1; j <= parameters.SO_MERCI; j++) {
+			if(ports_shm_ptr_req[i][j + (parameters.SO_MERCI * 2)] > 0) {
+				totalsent[j] += ports_shm_ptr_req[i][j + (parameters.SO_MERCI * 2)];
+			}
+		}
+	}
+
+	//print merci report
+	printf("-----------------------------------\n");
+	for(int i = 1; i < parameters.SO_MERCI + 1; i++) {
+		printf("MERCE %d:\n| GENERATED %d | AVAILABLE %d | SENT %d | DELIVERED %d |\n| SPOILED IN PORT %d | SPOILED IN SHIP %d |\n", i, totalgenerated[i], totalport[i], totalsent[i], totaldelivered[i], spoiledporto[i], spoilednave[i]);
 	}
 
 	//close messagequeues
@@ -295,13 +516,21 @@ int main (int argc, char ** argv) {
 
 	//close semaphore and shared memories
 	semctl(sem_id, 0, IPC_RMID);
-	shmctl(ports_shm_id_aval, IPC_RMID, NULL);
+	for(int i = 0; i < parameters.SO_PORTI; i++) {
+		shmctl(ports_shm_id_aval[i], IPC_RMID, NULL);
+		shmctl(ports_shm_id_req[i], IPC_RMID, NULL);
+	}
 
 	exit(0);
 }
 
 //gets the closed port that has a request for the specified merce; if the merce is not specified or no port has a request for it returns a random port
-int getRequesting(char *posx_s, char *posy_s, struct position * portpositions, struct merce ** portsrequests, int merce, int nporti) {
+int getRequesting(char *posx_s, char *posy_s, struct position * portpositions, int ** portsrequests, int merce, int nporti, int nmerci) {
+	if(merce == 0) {
+		//printf("NO MERCE SPECIFIED, RETURNING RANDOM PORT\n");
+		return rand() % nporti;
+	}
+	
 	struct position currpos;
 	struct position minpos;
 	minpos.x = 1000000;
@@ -310,21 +539,14 @@ int getRequesting(char *posx_s, char *posy_s, struct position * portpositions, s
 	sscanf(posy_s, "%lf", &currpos.y);
 	int imin = 0;
 	for(int i = 0; i < nporti; i++) {
-		//printf("CHECKING PORT %d:\n", i);
-		for(int j = 0; j < 50 && portsrequests[i][j].type > 0; j++) {
 		//printf("REQUEST %d: TYPE: %d QTY: %d\n", j, portsrequests[i][j].type, portsrequests[i][j].qty);
-			if(portsrequests[i][j].type == merce && portsrequests[i][j].qty > 0) {
-				if(sqrt(pow((portpositions[i].x - currpos.x),2) + pow((portpositions[i].y - currpos.y),2)) < sqrt(pow((minpos.x - currpos.x),2) + pow((minpos.y - currpos.y),2))) {
-					imin = i;
-					minpos.x = portpositions[i].x;
-					minpos.y = portpositions[i].y;
-				}
+		if(portsrequests[i][merce] > 0) {
+			if(sqrt(pow((portpositions[i].x - currpos.x),2) + pow((portpositions[i].y - currpos.y),2)) < sqrt(pow((minpos.x - currpos.x),2) + pow((minpos.y - currpos.y),2))) {
+				imin = i;
+				minpos.x = portpositions[i].x;
+				minpos.y = portpositions[i].y;
 			}
 		}
-	}
-	if(merce == 0) {
-		//printf("NO MERCE SPECIFIED, RETURNING RANDOM PORT\n");
-		return rand() % nporti;
 	}
 	if(imin >= 0) {
 		//printf("FOUND CLOSEST PORT %d REQUESTING MERCE %d\n", imin, merce);
@@ -332,6 +554,19 @@ int getRequesting(char *posx_s, char *posy_s, struct position * portpositions, s
 	}
 	//printf("NO REQUESTS OF MERCE %d, RETURNING RANDOM PORT\n", merce);
 	return rand() % nporti;
+}
+
+void addMerceToPort(int qty, int type, int max_vita, int min_vita, struct merce * port, int limit, int * totalgenerated) {
+	for(int i = 0; i < limit; i++) {
+		if(port[i].type <= 0) {
+			port[i].qty = qty;
+			port[i].type = type;
+			gettimeofday(&port[i].spoildate, NULL);
+			port[i].spoildate.tv_sec += min_vita + (rand() % (max_vita - min_vita));
+			totalgenerated[type] += qty;
+			i = limit;
+		}
+	}
 }
 
 //load parameters from an input file; parameters must be separated by comma
