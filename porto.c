@@ -78,6 +78,7 @@ int main (int argc, char * argv[]) {
 	//create semaphore to oversee shared memory writing
 	port_sem_id = semget(IPC_PRIVATE, 1, 0600);
 	semctl(port_sem_id, 0, SETVAL, docks);
+	printf("NUMBER OF DOCKS: %d\n",semctl(port_sem_id, 0 ,GETVAL));
 
 	//wait until parent unlocks semaphore
 	sops.sem_num = 0;
@@ -178,14 +179,19 @@ void endreporthandler() {
 	message.mesg_type = 1;
 	char temp[20];
 
-	strcpy(message.mesg_text, "P");
 	for(int i = 1; i < num_merci + 1; i++) {
+		strcpy(message.mesg_text, "P");
+		strcat(message.mesg_text, ":");
+		sprintf(temp, "%d", i);
+		strcat(message.mesg_text, temp);
 		strcat(message.mesg_text, ":");
 		sprintf(temp, "%d", spoiled[i]);
 		strcat(message.mesg_text, temp);
+		msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
 	}
-
+	strcpy(message.mesg_text, "P:end");
 	msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
+
 
 	exit(0);
 }

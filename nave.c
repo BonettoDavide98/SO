@@ -236,6 +236,7 @@ int main (int argc, char * argv[]) {
 				sops.sem_flg = 0;
 				sops.sem_op = 1;
 				semop(portsemaphore, &sops, 1);
+				portsemaphore = -1;
 
 				currentplace = 0;
 
@@ -376,13 +377,18 @@ void endreporthandler() {
 	message.mesg_type = 1;
 	char temp[20];
 
-	strcpy(message.mesg_text, "S");
+	
 	for(int i = 1; i < num_merci + 1; i++) {
+		strcpy(message.mesg_text, "S");
+		strcat(message.mesg_text, ":");
+		sprintf(temp, "%d", i);
+		strcat(message.mesg_text, temp);
 		strcat(message.mesg_text, ":");
 		sprintf(temp, "%d", spoiled[i]);
 		strcat(message.mesg_text, temp);
+		msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
 	}
-
+	strcpy(message.mesg_text, "S:end");
 	msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
 
 	exit(0);

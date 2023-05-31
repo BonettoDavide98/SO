@@ -290,6 +290,7 @@ int main (int argc, char ** argv) {
 	char y[20];
 	char dayr[3];
 	char tempstr[20];
+	char tempstr2[20];
 	char portid[20];
 	int spoilednave[parameters.SO_MERCI + 1];
 	int spoiledporto[parameters.SO_MERCI + 1];
@@ -414,19 +415,23 @@ int main (int argc, char ** argv) {
 				break;
 			case 'P':
 				strtok(message.mesg_text, ":");
-				for(int i = 1; i < parameters.SO_MERCI + 1; i++) {
-					strcpy(tempstr, strtok(NULL, ":"));
-					spoiledporto[i] += atoi(tempstr);
+				strcpy(tempstr, strtok(NULL, ":"));
+				if(strcmp(tempstr, "end") == 0) {
+					num_kid_pids_porti--;
+				} else {
+					strcpy(tempstr2, strtok(NULL, ":"));
+					spoiledporto[atoi(tempstr)] += atoi(tempstr2);
 				}
-				num_kid_pids_porti--;
 				break;
 			case 'S' :
 				strtok(message.mesg_text, ":");
-				for(int i = 1; i < parameters.SO_MERCI + 1; i++) {
-					strcpy(tempstr, strtok(NULL, ":"));
-					spoilednave[i] += atoi(tempstr);
+				strcpy(tempstr, strtok(NULL, ":"));
+				if(strcmp(tempstr, "end") == 0) {
+					num_kid_pids_navi--;
+				} else {
+					strcpy(tempstr2, strtok(NULL, ":"));
+					spoilednave[atoi(tempstr)] += atoi(tempstr2);
 				}
-				num_kid_pids_navi--;
 				break;
 			default :
 				if(timeended == 0) {
@@ -465,9 +470,11 @@ int main (int argc, char ** argv) {
 
 	for(int i = 0; i < parameters.SO_PORTI; i++) {
 		//add merce still in port
-		for(int j = 0; j < parameters.SO_MERCI; j++) {
-			if(ports_shm_ptr_aval[i][j].type > 0 && ports_shm_ptr_aval[i][j].qty > 0) {
-				totalport[ports_shm_ptr_aval[i][j].type] += ports_shm_ptr_aval[i][j].qty;
+		if(allmerciempty != 1) {
+			for(int j = 0; j < parameters.SO_MERCI; j++) {
+				if(ports_shm_ptr_aval[i][j].type > 0 && ports_shm_ptr_aval[i][j].qty > 0) {
+					totalport[ports_shm_ptr_aval[i][j].type] += ports_shm_ptr_aval[i][j].qty;
+				}
 			}
 		}
 
