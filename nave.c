@@ -161,7 +161,6 @@ int main (int argc, char * argv[]) {
 			portsemaphore = atoi(strtok(NULL, ":"));
 
 			//if port accepted the request, start loading and unloading cargo
-			currentplace = 1;
 			removeSpoiled(cargo);
 			if((int *) (shm_ptr_porto_req = (int *) shmat(atoi(shm_id_porto_req), NULL, 0)) == -1) {
 				printf("*** shmat error nave req ***\n");
@@ -171,14 +170,12 @@ int main (int argc, char * argv[]) {
 				printf("*** shmat error nave aval ***\n");
 				randomportflag = 1;
 			}
-
-			if(randomportflag == 0) {
-				//check if resource is available before starting
-				sops.sem_num = 0;
-				sops.sem_flg = 0;
-				sops.sem_op = -1;
-				semop(portsemaphore, &sops, 1);
-
+			
+			//check if resource is available before starting
+			sops.sem_op = -1;
+			if(randomportflag == 0 && semop(portsemaphore, &sops, 1) != -1) {
+				currentplace = 1;
+				
 				tonstomove = unloadCargo(cargo, shm_ptr_porto_req, max_slots, num_merci);
 
 				cargocapacity_free = cargocapacity;
@@ -232,12 +229,10 @@ int main (int argc, char * argv[]) {
 				}
 
 				//unblock the resource
-				sops.sem_num = 0;
-				sops.sem_flg = 0;
 				sops.sem_op = 1;
-				semop(portsemaphore, &sops, 1);
-				portsemaphore = -1;
-
+				while(semop(portsemaphore, &sops, 1) == -1) {
+					currentplace = 0;
+				}
 				currentplace = 0;
 
 				hascargo = 0;

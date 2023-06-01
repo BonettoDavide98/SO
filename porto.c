@@ -77,8 +77,11 @@ int main (int argc, char * argv[]) {
 
 	//create semaphore to oversee shared memory writing
 	port_sem_id = semget(IPC_PRIVATE, 1, 0600);
-	semctl(port_sem_id, 0, SETVAL, docks);
-	printf("NUMBER OF DOCKS: %d\n",semctl(port_sem_id, 0 ,GETVAL));
+	semctl(port_sem_id, 0, SETVAL, 0);
+	sops.sem_num = 0;
+	sops.sem_flg = 0;
+	sops.sem_op = docks;
+	semop(port_sem_id, &sops, 1);
 
 	//wait until parent unlocks semaphore
 	sops.sem_num = 0;
