@@ -113,10 +113,10 @@ int main (int argc, char * argv[]) {
 			randomportflag = 0;
 			strcat(message.mesg_text, "0");
 		}
-		msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
+		msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 35), 0);
 
 		//wait for master answer
-		while(msgrcv(atoi(argv[1]), &message, (sizeof(long) + sizeof(char) * 100), 1, 0) == -1) {
+		while(msgrcv(atoi(argv[1]), &message, (sizeof(long) + sizeof(char) * 35), 1, 0) == -1) {
 			//loop until message is received
 		}
 
@@ -144,10 +144,10 @@ int main (int argc, char * argv[]) {
 		strcpy(message.mesg_text, "dockrq");
 		strcat(message.mesg_text, ":");
 		strcat(message.mesg_text, argv[1]);
-		msgsnd(atoi(msgq_id_porto), &message, (sizeof(long) + sizeof(char) * 100), 0);
+		msgsnd(atoi(msgq_id_porto), &message, (sizeof(long) + sizeof(char) * 20), 0);
 
 		//wait for port answer
-		while(msgrcv(atoi(argv[1]), &message, (sizeof(long) + sizeof(char) * 100), 1, 0) == -1) {
+		while(msgrcv(atoi(argv[1]), &message, (sizeof(long) + sizeof(char) * 50), 1, 0) == -1) {
 
 		}
 		strcpy(text, strtok(message.mesg_text, ":"));
@@ -364,27 +364,32 @@ void reporthandler() {
 		strcat(message.mesg_text, "2");			//s:day:2	in port
 	}
 
-	msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
+	msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 6), 0);
 }
 
 void endreporthandler() {
 	struct mesg_buffer message;
 	message.mesg_type = 1;
 	char temp[20];
-
+	struct timeval sleep;
+	sleep.tv_sec = 0;
+	sleep.tv_usec = 100;
 	
 	for(int i = 1; i < num_merci + 1; i++) {
-		strcpy(message.mesg_text, "S");
-		strcat(message.mesg_text, ":");
-		sprintf(temp, "%d", i);
-		strcat(message.mesg_text, temp);
-		strcat(message.mesg_text, ":");
-		sprintf(temp, "%d", spoiled[i]);
-		strcat(message.mesg_text, temp);
-		msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
+		if(spoiled[i] > 0) {
+			strcpy(message.mesg_text, "S");
+			strcat(message.mesg_text, ":");
+			sprintf(temp, "%d", i);
+			strcat(message.mesg_text, temp);
+			strcat(message.mesg_text, ":");
+			sprintf(temp, "%d", spoiled[i]);
+			strcat(message.mesg_text, temp);
+			msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 15), 0);
+			nanosleep(&sleep, &sleep);
+		}
 	}
 	strcpy(message.mesg_text, "S:end");
-	msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
+	msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 10), 0);
 
 	exit(0);
 }

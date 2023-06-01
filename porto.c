@@ -95,7 +95,7 @@ int main (int argc, char * argv[]) {
 	char text[20];
 
 	while(1) {
-		while(msgrcv(msgq_porto, &message, (sizeof(long) + sizeof(char) * 100), 1, 0) == -1) {
+		while(msgrcv(msgq_porto, &message, (sizeof(long) + sizeof(char) * 20), 1, 0) == -1) {
 			//loop until message is received
 		}
 		strcpy(operation, strtok(message.mesg_text, ":"));
@@ -116,7 +116,7 @@ int main (int argc, char * argv[]) {
 			strcat(message.mesg_text, ":");
 			sprintf(text, "%d", port_sem_id);
 			strcat(message.mesg_text, text);
-			msgsnd(atoi(ship_id), &message, (sizeof(long) + sizeof(char) * 100), 0);
+			msgsnd(atoi(ship_id), &message, (sizeof(long) + sizeof(char) * 50), 0);
 			removeSpoiled(shm_ptr_aval);
 		}
 	}
@@ -174,27 +174,32 @@ void reporthandler() {
 	sprintf(temp, "%d", docks - semctl(port_sem_id, 0, GETVAL));
 	strcat(message.mesg_text, temp);	//occupied docks
 
-	msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
+	msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 50), 0);
 }
 
 void endreporthandler() {
 	struct mesg_buffer message;
 	message.mesg_type = 1;
 	char temp[20];
+	struct timeval sleep;
+	sleep.tv_sec = 0;
+	sleep.tv_usec = 100;
 
 	for(int i = 1; i < num_merci + 1; i++) {
-		strcpy(message.mesg_text, "P");
-		strcat(message.mesg_text, ":");
-		sprintf(temp, "%d", i);
-		strcat(message.mesg_text, temp);
-		strcat(message.mesg_text, ":");
-		sprintf(temp, "%d", spoiled[i]);
-		strcat(message.mesg_text, temp);
-		msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
+		if(spoiled[i] > 0) {
+			strcpy(message.mesg_text, "P");
+			strcat(message.mesg_text, ":");
+			sprintf(temp, "%d", i);
+			strcat(message.mesg_text, temp);
+			strcat(message.mesg_text, ":");
+			sprintf(temp, "%d", spoiled[i]);
+			strcat(message.mesg_text, temp);
+			msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 15), 0);
+			nanosleep(&sleep, &sleep);
+		}
 	}
 	strcpy(message.mesg_text, "P:end");
-	msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
-
+	msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 10), 0);
 
 	exit(0);
 }

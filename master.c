@@ -10,6 +10,7 @@
 #include <sys/time.h>
 #include <signal.h>
 #include <time.h>
+#include <sys/resource.h>
 #include "merce.h"
 
 #define MAX_DAYS 30
@@ -97,6 +98,14 @@ int main (int argc, char ** argv) {
 		printf("*** master msgqueue error ***\n");
 		exit(1);
 	}
+
+	/*struct rlimit limit;
+	limit.rlim_cur = RLIM_INFINITY;
+	limit.rlim_max = RLIM_INFINITY;
+	if(setrlimit(RLIMIT_MSGQUEUE, &limit) == -1) {
+		printf("Can't allocate enough memory for msgqueue.\n");
+		exit(1);
+	}*/
 
 	ports_positions[0].x = 0;
 	ports_positions[0].y = 0;
@@ -344,6 +353,7 @@ int main (int argc, char ** argv) {
 				}
 				break;
 			case 'd':
+				printf("DAY %d\n", day);
 				for(int i = 0; i < parameters.SO_NAVI + parameters.SO_PORTI; i++) {
 					kill(kid_pids[i], SIGUSR2);
 				}
@@ -358,6 +368,8 @@ int main (int argc, char ** argv) {
 						}
 					}
 				}
+
+				printf("TEST1\n");
 
 				//check if there is at least one merce available
 				allmerciempty = 1;
@@ -379,15 +391,17 @@ int main (int argc, char ** argv) {
 						}
 					}
 				}
+				printf("TEST2\n");
 
 				if(timeended == 0 && (allrequestfulfilled == 1 || allmerciempty == 1)) {
 					timeended = 1;
 					strcpy(message.mesg_text, "t");
-					msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 100), 0);
+					msgsnd(master_msgq, &message, (sizeof(long) + sizeof(char) * 2), 0);
 					kill(kid_pids[parameters.SO_PORTI + parameters.SO_NAVI], SIGINT);
 					printf("SIMULATION INTERRUPTED\n");
 				}
 
+				printf("TEST3\n");
 				//print report
 				printf("-----------------------------------\n");
 				if(day < MAX_DAYS && timeended == 0) {
@@ -405,6 +419,7 @@ int main (int argc, char ** argv) {
 					printf("%d/%d OCCUPIED DOCKS\n", reports[day].ports[i].docksocc, reports[day].ports[i].dockstot);
 				}
 				printf("-----------------------------------\n");
+				printf("TEST4\n");
 				day++;
 				break;
 			case 't':
@@ -414,6 +429,7 @@ int main (int argc, char ** argv) {
 				timeended = 1;
 				break;
 			case 'P':
+				//printf("%s\n", message.mesg_text);
 				strtok(message.mesg_text, ":");
 				strcpy(tempstr, strtok(NULL, ":"));
 				if(strcmp(tempstr, "end") == 0) {
@@ -424,6 +440,7 @@ int main (int argc, char ** argv) {
 				}
 				break;
 			case 'S' :
+				//printf("%s\n", message.mesg_text);
 				strtok(message.mesg_text, ":");
 				strcpy(tempstr, strtok(NULL, ":"));
 				if(strcmp(tempstr, "end") == 0) {
